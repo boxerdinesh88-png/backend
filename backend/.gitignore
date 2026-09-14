@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+db.sqlite3
+*.sqlite3
+*.bak
+.staticfiles
+mediafiles/
+media/
+
+# Env / secrets — ignore every .env* everywhere. Only *.example files
+# are tracked so deployment templates stay in the repo.
+.env
+.env.*
+!*.example
+!**/.env.example
+!**/.*.env.example
+
+# Runtime / junk
+*.log
+pip-install*.log* .egg-info/

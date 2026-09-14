@@ -1,0 +1,92 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cash Request Received</title>
+</head>
+<body style="margin:0;padding:0;background:#eef2f7;font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+           style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+
+      <tr>
+        <td style="background:linear-gradient(135deg,#1e3a8a,#0f766e);padding:28px 32px;color:#ffffff;">
+          <div style="font-size:22px;font-weight:700;letter-spacing:0.5px;">Phahendra Babu Library</div>
+          <div style="font-size:13px;opacity:0.85;margin-top:2px;">Premium Seat Booking</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding:32px;">
+          <h1 style="margin:0 0 6px;font-size:21px;color:#0f172a;">Cash booking request received, {{ member_name }}!</h1>
+          <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#475569;">
+            {{ body_note }}
+          </p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td colspan="2" style="padding:14px 20px;background:#f8fafc;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:600;">
+                Request details
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;width:40%;border-top:1px solid #f1f5f9;">Request ID</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;border-top:1px solid #f1f5f9;">{{ booking_id|upper }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Time block</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ shift_name }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Hours</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ hours }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Seat</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ seat }}{% if section %} &middot; {{ section }}{% endif %}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Duration</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ plan_label }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Amount to pay</td>
+              <td style="padding:12px 20px;font-size:13px;color:#b45309;font-weight:700;">&#8377;{{ amount }} (cash)</td>
+            </tr>
+            {% if cash_expires %}
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Request valid until</td>
+              <td style="padding:12px 20px;font-size:13px;color:#b45309;font-weight:600;">{{ cash_expires }}</td>
+            </tr>
+            {% endif %}
+          </table>
+
+          <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#475569;">
+            If the request is not confirmed by the library within 3 days, it will be
+            automatically cancelled and your seat will be released. You can track the
+            request anytime from your
+            <a href="{{ dashboard_url }}" style="color:#0f766e;font-weight:600;">dashboard</a>.
+          </p>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="background:#0f172a;padding:24px 32px;color:#94a3b8;font-size:12px;line-height:1.9;">
+          <div style="color:#e2e8f0;font-weight:600;margin-bottom:6px;font-size:14px;">Phahendra Babu Library</div>
+          Vill- Kharhat, Begusarai, Bihar 851217<br>
+          +91 8804162854 &middot; PhahendraBabulibrary@gmail.com<br>
+          Managed by Akash Kumar
+        </td>
+      </tr>
+    </table>
+
+    <p style="text-align:center;font-size:11px;color:#94a3b8;margin:16px 0 0;">
+      This is an automated message from Phahendra Babu Library. Please do not reply to this email.
+    </p>
+  </div>
+</body>
+</html>

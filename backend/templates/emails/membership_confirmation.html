@@ -1,0 +1,184 @@
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seat Confirmed</title>
+</head>
+<body style="margin:0;padding:0;background:#eef2f7;font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+           style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+
+      <tr>
+        <td style="background:linear-gradient(135deg,#1e3a8a,#0f766e);padding:28px 32px;color:#ffffff;">
+          <div style="font-size:22px;font-weight:700;letter-spacing:0.5px;">Phahendra Babu Library</div>
+          <div style="font-size:13px;opacity:0.85;margin-top:2px;">Premium Seat Booking</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding:32px;">
+          <h1 style="margin:0 0 6px;font-size:21px;color:#0f172a;">Your seat is confirmed, {{ member_name }}!</h1>
+          <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#475569;">
+            Thank you for booking at Phahendra Babu Library. Please keep this email — it is your
+            booking confirmation. Your seat is reserved automatically every day for your time block.
+          </p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td colspan="2" style="padding:14px 20px;background:#f8fafc;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:600;">
+                Booking details
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;width:40%;border-top:1px solid #f1f5f9;">Booking ID</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;border-top:1px solid #f1f5f9;">{{ booking_id|upper }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Time block</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ shift_name }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Hours</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ hours }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Seat</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ seat }}{% if section %} &middot; {{ section }}{% endif %}</td>
+            </tr>
+            {% if premium %}
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Seat type</td>
+              <td style="padding:12px 20px;font-size:13px;color:#d97706;font-weight:700;">Premium seat{% if premium_extra %} &middot; +&#8377;{{ premium_extra }}/month{% endif %}</td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Duration</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ plan_label }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Valid from</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ start_date|date:"d M Y" }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Valid until</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ end_date|date:"d M Y" }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Total paid</td>
+              <td style="padding:12px 20px;font-size:13px;color:#047857;font-weight:700;">&#8377;{{ amount }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Payment method</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ payment_method|default:"UPI" }}</td>
+            </tr>
+            {% if payment_ref %}
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Payment ref</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ payment_ref }}</td>
+            </tr>
+            {% endif %}
+          </table>
+
+          <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#475569;">
+            On your first visit, show your name or this booking ID at the front desk to claim your seat.
+            You can also view your booking anytime from your
+            <a href="{{ dashboard_url }}" style="color:#0f766e;font-weight:600;">your booking dashboard</a>.
+          </p>
+        </td>
+      </tr>
+
+      <!-- Features Section -->
+      <tr>
+        <td style="padding:0 32px 32px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td colspan="2" style="padding:14px 20px;background:linear-gradient(135deg,#0f766e,#059669);font-size:12px;color:#ffffff;text-transform:uppercase;letter-spacing:1px;font-weight:600;">
+                Features provided to you
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;border-top:1px solid #f1f5f9;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;border-top:1px solid #f1f5f9;"><strong>Comfortable Study Seats</strong> &mdash; Ergonomically designed, well-cushioned seats for long study sessions.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Peaceful Study Environment</strong> &mdash; A calm, noise-free atmosphere to help you concentrate.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Proper Lighting</strong> &mdash; Well-lit study areas to reduce eye strain and keep you focused.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>High-Speed Internet</strong> &mdash; Fast and reliable Wi-Fi for online research and digital study materials.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Mobile &amp; Laptop Charging Facility</strong> &mdash; Convenient charging points at every seat.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Safe Drinking Water Facility</strong> &mdash; Clean, filtered drinking water available at all times.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Clean and Hygienic Washroom</strong> &mdash; Well-maintained, sanitised washrooms for your comfort.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Separate Seating for Girls &amp; Boys</strong> &mdash; Dedicated seating sections for comfort and privacy.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Air-Conditioned Study Hall</strong> &mdash; Fully air-conditioned for a comfortable environment in every season.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Up to 3 Hours Power Backup</strong> &mdash; Uninterrupted study with backup during power outages.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>CCTV Camera Security</strong> &mdash; 24/7 surveillance across the campus for your safety.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Safe &amp; Secure Campus</strong> &mdash; A well-guarded campus for peaceful studying.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Quality Study Facility in the Village</strong> &mdash; Premium library experience right in the village.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Green Refreshment &amp; Relaxation Area</strong> &mdash; A dedicated green zone to relax and recharge.</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 20px;font-size:13px;color:#0f172a;width:32px;vertical-align:top;">&#9989;</td>
+              <td style="padding:10px 20px;font-size:13px;color:#334155;"><strong>Focuses on Students Success</strong> &mdash; Every facility designed to help you achieve your academic best.</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="background:#0f172a;padding:24px 32px;color:#94a3b8;font-size:12px;line-height:1.9;">
+          <div style="color:#e2e8f0;font-weight:600;margin-bottom:6px;font-size:14px;">Phahendra Babu Library</div>
+          Vill- Kharhat, Begusarai, Bihar 851217<br>
+          +91 8804162854 &middot; PhahendraBabulibrary@gmail.com<br>
+          Managed by Akash Kumar
+        </td>
+      </tr>
+    </table>
+
+    <p style="text-align:center;font-size:11px;color:#94a3b8;margin:16px 0 0;">
+      This is an automated message from Phahendra Babu Library. Please do not reply to this email.
+    </p>
+  </div>
+</body>
+</html>

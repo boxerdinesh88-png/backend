@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Membership Expiry Reminder</title>
+</head>
+<body style="margin:0;padding:0;background:#eef2f7;font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+           style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+
+      <tr>
+        <td style="background:linear-gradient(135deg,#92400e,#b45309);padding:28px 32px;color:#ffffff;">
+          <div style="font-size:22px;font-weight:700;letter-spacing:0.5px;">Phahendra Babu Library</div>
+          <div style="font-size:13px;opacity:0.85;margin-top:2px;">Premium Seat Booking</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding:32px;">
+          <h1 style="margin:0 0 6px;font-size:21px;color:#0f172a;">{{ heading }}, {{ member_name }}!</h1>
+          <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#475569;">{{ body_note }}</p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                 style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+            <tr>
+              <td colspan="2" style="padding:14px 20px;background:#f8fafc;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:600;">
+                Your membership
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;width:40%;border-top:1px solid #f1f5f9;">Time block</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;border-top:1px solid #f1f5f9;">{{ shift_name }} ({{ hours }})</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Seat</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ seat }}{% if section %} &middot; {{ section }}{% endif %}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Valid until</td>
+              <td style="padding:12px 20px;font-size:13px;color:#b45309;font-weight:700;">{{ end_date|date:"d M Y" }}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Days left</td>
+              <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ days_left }} day{{ days_left|pluralize }}</td>
+            </tr>
+          </table>
+
+          <div style="text-align:center;margin:28px 0 4px;">
+            <a href="{{ renew_url }}"
+               style="display:inline-block;background:linear-gradient(135deg,#1e3a8a,#0f766e);color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:10px;font-size:14px;font-weight:700;">
+              Renew my seat
+            </a>
+          </div>
+          <p style="text-align:center;font-size:12px;color:#94a3b8;margin:10px 0 0;">
+            or log in to your
+            <a href="{{ dashboard_url }}" style="color:#0f766e;font-weight:600;">your booking dashboard</a>
+          </p>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="background:#0f172a;padding:24px 32px;color:#94a3b8;font-size:12px;line-height:1.9;">
+          <div style="color:#e2e8f0;font-weight:600;margin-bottom:6px;font-size:14px;">Phahendra Babu Library</div>
+          Vill- Kharhat, Begusarai, Bihar 851217<br>
+          +91 8804162854 &middot; PhahendraBabulibrary@gmail.com<br>
+          Managed by Akash Kumar
+        </td>
+      </tr>
+    </table>
+
+    <p style="text-align:center;font-size:11px;color:#94a3b8;margin:16px 0 0;">
+      This is an automated message from Phahendra Babu Library. Please do not reply.
+    </p>
+  </div>
+</body>
+</html>
