@@ -7,6 +7,7 @@ from django.db import models
 MEMBERSHIP_STATUS = (
     ("pending_payment", "Pending Payment"),
     ("pending_cash", "Pending Cash"),
+    ("pending_approval", "Pending Approval"),
     ("active", "Active"),
     ("expired", "Expired"),
     ("cancelled", "Cancelled"),
@@ -26,6 +27,7 @@ PLAN_PRICES = {
 PAYMENT_METHODS = (
     ("upi", "UPI"),
     ("cash", "Cash"),
+    ("manual", "QR / Manual"),
 )
 
 # Lifecycle: created → (authorized →) paid | failed. A late webhook may move
@@ -131,6 +133,9 @@ class Payment(models.Model):
     razorpay_order_id = models.CharField(max_length=100, blank=True, default="")
     razorpay_payment_id = models.CharField(max_length=120, blank=True, default="")
     razorpay_signature = models.CharField(max_length=255, blank=True, default="")
+    transaction_id = models.CharField(max_length=120, blank=True, default="")
+    receipt = models.FileField(upload_to="payment_receipts/", blank=True, null=True)
+    admin_note = models.CharField(max_length=255, blank=True, default="")
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     method = models.CharField(max_length=20, default="upi")
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS, default="created")
@@ -209,6 +214,35 @@ def get_discount_percent(months):
         .first()
     )
     return tier.discount_percent if tier else Decimal("0")
+
+
+class PaymentSettings(models.Model):
+    """Library-owned UPI details shown on the QR/manual payment screen.
+
+    A single row exists (get_singleton). The admin uploads the scan-to-pay QR
+    image and the member-facing pay step renders it with the exact amount.
+    """
+
+    upi_id = models.CharField(max_length=80, blank=True, default="")
+    upi_name = models.CharField(max_length=80, blank=True, default="")
+    qr_image = models.ImageField(upload_to="payment_qr/", blank=True, null=True)
+    bank_account_number = models.CharField(max_length=30, blank=True, default="")
+    bank_ifsc = models.CharField(max_length=20, blank=True, default="")
+    bank_name = models.CharField(max_length=60, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = "Payment settings"
+
+    def __str__(self):
+        return self.upi_id or f"Payment settings #{self.pk}"
+
+    @classmethod
+    def get_singleton(cls):
+        obj = cls.objects.first()
+        if obj is None:
+            obj = cls.objects.create()
+        return obj
 
 
 class WebhookEvent(models.Model):

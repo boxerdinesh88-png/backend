@@ -14,9 +14,10 @@ from apps.core.exceptions import error_response
 from apps.core.permissions import IsAdmin
 from apps.library.models import Seat, Shift
 
-from .models import DurationDiscount, Membership, get_discount_percent
+from .models import DurationDiscount, Membership, PaymentSettings, get_discount_percent
 from .serializers import (
     DurationDiscountSerializer,
+    ManualPaymentSubmitSerializer,
     MembershipAdminSerializer,
     MembershipCreateSerializer,
     MembershipSerializer,
@@ -30,6 +31,7 @@ from .services import (
     payment_status_report,
     process_webhook_event,
     request_cash_payment,
+    request_manual_payment,
     seat_is_available,
     verify_and_activate,
 )
@@ -116,7 +118,7 @@ class MembershipViewSet(viewsets.GenericViewSet):
 
         # A member never keeps stale unpaid drafts around.
         stale = Membership.objects.filter(
-            member=request.user, status__in=("pending_payment", "pending_cash")
+            member=request.user, status__in=("pending_payment", "pending_cash", "pending_approval")
         )
         for membership in stale:
             _release_membership_booking(membership)
@@ -229,6 +231,37 @@ class MembershipViewSet(viewsets.GenericViewSet):
         return Response(MembershipSerializer(membership).data)
 
     @action(detail=True, methods=["post"])
+    def submit_manual_payment(self, request, pk=None):
+        membership = self.get_object()
+        if membership.status != "pending_payment":
+            return error_response(
+                "Membership is not awaiting payment.", code="bad_state"
+            )
+        if membership.payment_method == "manual":
+            return error_response(
+                "A manual payment is already submitted for this membership.",
+                code="bad_state",
+            )
+        serializer = ManualPaymentSubmitSerializer(data=request.data)
+        if not serializer.is_valid():
+            return error_response(
+                "Please fix the highlighted fields.",
+                code="validation_error",
+                fields=serializer.errors,
+            )
+        receipt = serializer.validated_data["receipt"]
+        if getattr(receipt, "size", 0) > 3 * 1024 * 1024:
+            return error_response(
+                "Receipt screenshot must be under 3 MB.", code="receipt_too_large"
+            )
+        request_manual_payment(
+            membership,
+            serializer.validated_data["transaction_id"],
+            receipt,
+        )
+        return Response(MembershipSerializer(membership).data)
+
+    @action(detail=True, methods=["post"])
     def select_seat(self, request, pk=None):
         membership = self.get_object()
         if membership.status not in ("pending_payment", "active"):
@@ -265,6 +298,33 @@ class DurationDiscountView(APIView):
     def get(self, request):
         tiers = DurationDiscount.objects.filter(is_active=True).order_by("min_months")
         return Response(DurationDiscountSerializer(tiers, many=True).data)
+
+
+class PaymentSettingsView(APIView):
+    """Public QR/manual UPI payment details shown on the checkout screen.
+
+    `is_active` is only true when the library has configured a UPI id and QR
+    image and enabled the setting; otherwise the member UI falls back to cash.
+    """
+
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def get(self, request):
+        settings = PaymentSettings.get_singleton()
+        configured = bool(settings.upi_id and settings.qr_image)
+        return Response({
+            "upi_id": settings.upi_id,
+            "upi_name": settings.upi_name,
+            "qr_image": (
+                request.build_absolute_uri(settings.qr_image.url)
+                if settings.qr_image else None
+            ),
+            "bank_account_number": settings.bank_account_number,
+            "bank_ifsc": settings.bank_ifsc,
+            "bank_name": settings.bank_name,
+            "is_active": settings.is_active and configured,
+        })
 
 
 class RazorpayWebhookView(APIView):
@@ -327,7 +387,8 @@ class AdminMembershipViewSet(viewsets.ModelViewSet):
         shift = params.get("shift")
         search = params.get("search")
         if status_filter:
-            qs = qs.filter(status=status_filter)
+            statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
+            qs = qs.filter(status__in=statuses)
         if shift:
             qs = qs.filter(shift_id=shift)
         if search:
@@ -378,6 +439,39 @@ class AdminMembershipViewSet(viewsets.ModelViewSet):
         from .services import recompute_membership_amount
 
         recompute_membership_amount(membership)
+        return Response(MembershipAdminSerializer(membership).data)
+
+    @action(detail=True, methods=["post"])
+    def approve_payment(self, request, pk=None):
+        """Approve a cash or QR/manual payment review and activate the pass."""
+        membership = self.get_object()
+        if membership.status not in ("pending_cash", "pending_approval"):
+            return error_response(
+                "This membership is not awaiting payment approval.",
+                code="bad_state",
+            )
+        from .services import approve_pending_payment
+
+        approve_pending_payment(membership)
+        return Response(MembershipAdminSerializer(membership).data)
+
+    @action(detail=True, methods=["post"])
+    def reject_payment(self, request, pk=None):
+        """Reject a cash or QR/manual payment review.
+
+        Optionally pass a `reason` (shown in the member-facing email). The
+        membership is cancelled and the held seat released.
+        """
+        membership = self.get_object()
+        if membership.status not in ("pending_cash", "pending_approval"):
+            return error_response(
+                "This membership is not awaiting payment approval.",
+                code="bad_state",
+            )
+        from .services import reject_pending_payment
+
+        reason = request.data.get("reason", "") or ""
+        reject_pending_payment(membership, reason)
         return Response(MembershipAdminSerializer(membership).data)
 
     @action(detail=False, methods=["get"])

@@ -71,7 +71,9 @@ class DashboardViewSet(viewsets.ViewSet):
                 end_date__lte=today + timedelta(days=EXPIRING_SOON_DAYS)
             ).count(),
             "pending_payments": Membership.objects.filter(status="pending_payment").count(),
-            "pending_cash_requests": Membership.objects.filter(status="pending_cash").count(),
+            "pending_cash_requests": Membership.objects.filter(
+                status__in=("pending_cash", "pending_approval")
+            ).count(),
             "seats": {
                 "total": total_seats,
                 "occupied": occupied,

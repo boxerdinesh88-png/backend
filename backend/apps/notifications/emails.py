@@ -18,8 +18,10 @@ def _membership_context(membership):
     payment_method = (membership.payment_method or "upi").upper()
     if payment is not None and payment.method:
         payment_method = (payment.method or "upi").upper()
-        if payment.razorpay_payment_id:
-            payment_ref = payment.razorpay_payment_id
+        payment_ref = (
+            payment.razorpay_payment_id
+            or payment.transaction_id
+        )
 
     return {
         "member_name": membership.member.name,
@@ -126,6 +128,76 @@ def build_cash_request_acknowledgement(membership):
         "Managed by Akash Kumar"
     )
     html = render_to_string("emails/cash_request.html", ctx)
+    return subject, plain, html
+
+
+def build_manual_payment_acknowledgement(membership):
+    """Return (subject, plain_text, html) for the QR/manual payment ack."""
+    ctx = _membership_context(membership)
+    expires_at = membership.cash_request_expires_at
+    try:
+        payment = membership.payment
+    except Exception:
+        payment = None
+    ctx["transaction_id"] = payment.transaction_id if payment else ""
+    ctx["cash_expires"] = (
+        timezone.localtime(expires_at).strftime("%d %b %Y, %I:%M %p")
+        if expires_at
+        else ""
+    )
+    ctx["heading"] = "UPI payment received — awaiting confirmation"
+    ctx["body_note"] = (
+        f"We received your UPI payment for ₹{ctx['amount']} "
+        f"(transaction {ctx['transaction_id']}). Your seat is reserved for the "
+        f"next 3 days, until {ctx['cash_expires']}. The library verifies each "
+        "transfer manually — once confirmed, your seat pass is activated "
+        "automatically and you will receive a confirmation email."
+    )
+    subject = "UPI payment received · seat held while we confirm"
+    plain = (
+        f"Hi {ctx['member_name']},\n\n"
+        "We received your UPI payment details.\n\n"
+        f"Booking ID    : {ctx['booking_id']}\n"
+        f"Transaction ID: {ctx['transaction_id']}\n"
+        f"Amount        : ₹{ctx['amount']}\n"
+        f"Time block    : {ctx['shift_name']} ({ctx['hours']})\n"
+        f"Seat          : {ctx['seat']}"
+        f"{' (' + ctx['section'] + ')' if ctx['section'] else ''}\n"
+        + (f"Seat type     : PREMIUM (+₹{ctx['premium_extra']}/month)\n" if ctx["premium"] and ctx["premium_extra"] else "")
+        + f"Duration      : {ctx['plan_label']}\n\n"
+        f"{ctx['body_note']}\n\n"
+        f"Request status can be viewed anytime at {ctx['dashboard_url']}.\n\n"
+        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"{ctx['library_phone']} · {ctx['library_email']}\n"
+        "Managed by Akash Kumar"
+    )
+    html = render_to_string("emails/manual_payment.html", ctx)
+    return subject, plain, html
+
+
+def build_payment_rejection(membership, reason):
+    """Return (subject, plain_text, html) for a rejected payment review."""
+    ctx = _membership_context(membership)
+    ctx["reason"] = reason
+    ctx["heading"] = "Payment could not be verified"
+    ctx["body_note"] = (
+        "Our team could not verify the payment for this booking. "
+        "The held seat has been released, so you can book again with a "
+        "different payment method or contact us for help."
+    )
+    subject = "Payment couldn't be verified · please book again"
+    plain = (
+        f"Hi {ctx['member_name']},\n\n"
+        f"We could not verify your payment for booking {ctx['booking_id']}.\n\n"
+        + (f"Reason noted: {reason}\n\n" if reason else "")
+        + f"{ctx['body_note']}\n\n"
+        f"Book again: {ctx['renew_url']}\n"
+        f"Questions? Call us at {ctx['library_phone']}.\n\n"
+        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"{ctx['library_phone']} · {ctx['library_email']}\n"
+        "Managed by Akash Kumar"
+    )
+    html = render_to_string("emails/payment_rejected.html", ctx)
     return subject, plain, html
 
 

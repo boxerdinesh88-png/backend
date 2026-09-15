@@ -88,6 +88,9 @@ class OTPCode(models.Model):
     is_used = models.BooleanField(default=False)
     expires_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+    delivery_error = models.TextField(blank=True, default="")
+    send_attempts = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
         ordering = ("-created_at",)

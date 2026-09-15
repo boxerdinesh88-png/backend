@@ -151,6 +151,10 @@ else:
             "OPTIONS": {
                 # SQLite timeout optimization for better concurrency handling
                 "timeout": 30,
+                # WAL allows concurrent readers + a single writer without the
+                # whole-file lock, and synchronous=NORMAL avoids fsync on every
+                # commit — critical when 10+ users save together on free hosts.
+                "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
             },
             "CONN_MAX_AGE": 0,  # SQLite doesn't benefit from connection pooling
         }
@@ -216,14 +220,17 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
-        "rest_framework.throttling.ScopedRateThrottle",
+        "apps.accounts.throttles.EmailScopedThrottle",
     ],
-    # Adjusted throttle rates for FREE plan - prevents abuse while allowing legitimate usage
+    # Adjusted throttle rates for FREE plan - prevents abuse while allowing legitimate usage.
+    # auth/otp scopes are keyed by the request email (EmailScopedThrottle), so a burst of
+    # simultaneous signups from one shared IP (library/college Wi-Fi) does not throttle each
+    # other out; per-address abuse stays capped. `anon` stays per-IP as a burst backstop.
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "60/minute",  # Reduced from 120 for FREE plan
-        "user": "300/minute",  # Reduced from 600 for FREE plan
-        "auth": "5/minute",  # Reduced from 10 for FREE plan
-        "otp": "3/minute",  # Reduced from 5 for FREE plan
+        "anon": "120/minute",  # burst backstop for one shared IP (was 60 for FREE plan)
+        "user": "300/minute",
+        "auth": "10/minute",  # per email
+        "otp": "5/minute",  # per email
         "reviews": "20/hour",  # public review submissions — spam guard
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -317,6 +324,9 @@ EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = _email_user
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() in ("1", "true")
+# Hard timeout so a hanging SMTP server never stalls an OTP send forever;
+# connectivity failures fail fast and are retried instead of blocking.
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "30"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Phahendra Babu Library <no-reply@phahendrababulibrary.example>")
 
 # ------------------------------------------------------------------ Payments

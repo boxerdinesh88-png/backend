@@ -6,8 +6,13 @@ from django.shortcuts import get_object_or_404
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import DurationDiscount, Membership, Payment
-from .services import activate_membership, _release_membership_booking
+from .models import DurationDiscount, Membership, Payment, PaymentSettings
+from .services import (
+    activate_membership,
+    approve_pending_payment,
+    reject_pending_payment,
+    _release_membership_booking,
+)
 
 
 @admin.register(Membership)
@@ -25,11 +30,8 @@ class MembershipAdmin(admin.ModelAdmin):
 
     # ------------------------------------------------------------- helpers
     def _decline(self, membership):
-        """Cancel a pending cash request and release its held seat."""
-        _release_membership_booking(membership)
-        membership.status = "cancelled"
-        membership.cash_request_expires_at = None
-        membership.save(update_fields=["status", "cash_request_expires_at"])
+        """Cancel a pending cash/QR request and release its held seat."""
+        reject_pending_payment(membership)
 
     # ---------------------------------------------------- per-row buttons
     def changelist_view(self, request, extra_context=None):
@@ -38,7 +40,7 @@ class MembershipAdmin(admin.ModelAdmin):
 
     @admin.display(description="Actions")
     def cash_actions(self, obj):
-        if obj.status != "pending_cash":
+        if obj.status not in ("pending_cash", "pending_approval"):
             return "—"
         approve = reverse("admin:memberships_membership_approve_cash", args=[obj.id])
         decline = reverse("admin:memberships_membership_decline_cash", args=[obj.id])
@@ -81,9 +83,9 @@ class MembershipAdmin(admin.ModelAdmin):
 
     def approve_cash_view(self, request, pk):
         membership = get_object_or_404(Membership, pk=pk)
-        if membership.status == "pending_cash":
+        if membership.status in ("pending_cash", "pending_approval"):
             try:
-                activate_membership(membership)
+                approve_pending_payment(membership)
             except Exception as exc:
                 import logging
 
@@ -98,56 +100,56 @@ class MembershipAdmin(admin.ModelAdmin):
                 return self._redirect_back(request)
             self.message_user(
                 request,
-                f"Cash request approved — seat booked for {membership.member.name}.",
+                f"Payment approved — seat booked for {membership.member.name}.",
                 messages.SUCCESS,
             )
         else:
             self.message_user(
                 request,
-                "Only pending cash requests can be approved.",
+                "Only pending payment requests can be approved.",
                 messages.WARNING,
             )
         return self._redirect_back(request)
 
     def decline_cash_view(self, request, pk):
         membership = get_object_or_404(Membership, pk=pk)
-        if membership.status == "pending_cash":
+        if membership.status in ("pending_cash", "pending_approval"):
             self._decline(membership)
             self.message_user(
                 request,
-                f"Cash request declined — seat released for {membership.member.name}.",
+                f"Payment declined — seat released for {membership.member.name}.",
                 messages.SUCCESS,
             )
         else:
             self.message_user(
                 request,
-                "Only pending cash requests can be declined.",
+                "Only pending payment requests can be declined.",
                 messages.WARNING,
             )
         return self._redirect_back(request)
 
     # --------------------------------------------------- bulk actions
-    @admin.action(description="Approve selected cash requests")
+    @admin.action(description="Approve selected payment requests")
     def approve_cash_requests(self, request, queryset):
         count = 0
-        for membership in queryset.filter(status="pending_cash"):
-            activate_membership(membership)
+        for membership in queryset.filter(status__in=("pending_cash", "pending_approval")):
+            approve_pending_payment(membership)
             count += 1
         self.message_user(
             request,
-            f"{count} cash request(s) approved and activated.",
+            f"{count} payment request(s) approved and activated.",
             messages.SUCCESS,
         )
 
-    @admin.action(description="Decline selected cash requests")
+    @admin.action(description="Decline selected payment requests")
     def decline_cash_requests(self, request, queryset):
         count = 0
-        for membership in queryset.filter(status="pending_cash"):
+        for membership in queryset.filter(status__in=("pending_cash", "pending_approval")):
             self._decline(membership)
             count += 1
         self.message_user(
             request,
-            f"{count} cash request(s) declined and seats released.",
+            f"{count} payment request(s) declined and seats released.",
             messages.SUCCESS,
         )
 
@@ -168,12 +170,40 @@ class MembershipAdmin(admin.ModelAdmin):
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
     list_display = (
-        "membership", "amount", "method", "status", "razorpay_order_id",
-        "razorpay_payment_id", "paid_at",
+        "membership", "amount", "method", "status", "transaction_id",
+        "razorpay_order_id", "razorpay_payment_id", "receipt_preview", "paid_at",
     )
     list_filter = ("status", "method")
-    search_fields = ("razorpay_order_id", "razorpay_payment_id")
-    readonly_fields = ("created_at", "paid_at")
+    search_fields = (
+        "razorpay_order_id", "razorpay_payment_id", "transaction_id", "admin_note"
+    )
+    readonly_fields = ("created_at", "paid_at", "receipt_preview")
+
+    @admin.display(description="Receipt")
+    def receipt_preview(self, obj):
+        if not obj.receipt:
+            return "—"
+        return format_html(
+            '<a href="{}" target="_blank">View</a>',
+            obj.receipt.url,
+        )
+
+
+@admin.register(PaymentSettings)
+class PaymentSettingsAdmin(admin.ModelAdmin):
+    """Manage the UPI id and scan-to-pay QR used on the checkout screen."""
+
+    list_display = ("upi_id", "upi_name", "qr_preview", "is_active")
+    list_editable = ("is_active",)
+
+    @admin.display(description="QR image")
+    def qr_preview(self, obj):
+        if not obj.qr_image:
+            return "—"
+        return format_html(
+            '<img src="{}" style="max-height:40px;border-radius:4px;" />',
+            obj.qr_image.url,
+        )
 
 
 @admin.register(DurationDiscount)

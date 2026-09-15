@@ -17,6 +17,24 @@ class ShiftSerializer(serializers.ModelSerializer):
         model = Shift
         fields = ("id", "name", "start_time", "end_time", "price", "is_active")
 
+    def validate_name(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Shift name cannot be empty.")
+        return value
+
+    def validate(self, attrs):
+        start = attrs.get("start_time", getattr(self.instance, "start_time", None))
+        end = attrs.get("end_time", getattr(self.instance, "end_time", None))
+        if start and end and start >= end:
+            raise serializers.ValidationError(
+                {"end_time": "End time must be later than start time."}
+            )
+        price = attrs.get("price")
+        if price is not None and price < 0:
+            raise serializers.ValidationError({"price": "Price cannot be negative."})
+        return attrs
+
 
 class SeatSerializer(serializers.ModelSerializer):
     available = serializers.SerializerMethodField()

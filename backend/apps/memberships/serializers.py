@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.accounts.serializers import DataURLFileField
 from apps.library.models import Seat, Shift
 from apps.library.serializers import SeatSerializer, ShiftSerializer
 
@@ -13,12 +14,34 @@ class DurationDiscountSerializer(serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    receipt_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Payment
         fields = (
             "id", "razorpay_order_id", "razorpay_payment_id",
-            "amount", "method", "status", "created_at", "paid_at",
+            "amount", "method", "status", "transaction_id", "receipt_url",
+            "admin_note", "created_at", "paid_at",
         )
+
+    def get_receipt_url(self, obj):
+        request = self.context.get("request")
+        if obj.receipt and request:
+            return request.build_absolute_uri(obj.receipt.url)
+        if obj.receipt:
+            return obj.receipt.url
+        return None
+
+
+class ManualPaymentSubmitSerializer(serializers.Serializer):
+    transaction_id = serializers.CharField(max_length=120, write_only=True)
+    receipt = DataURLFileField(write_only=True)
+
+    def validate_transaction_id(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Please enter the UPI transaction ID.")
+        return value
 
 
 class MembershipCreateSerializer(serializers.Serializer):

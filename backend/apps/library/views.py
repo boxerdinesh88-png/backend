@@ -2,6 +2,7 @@
 from datetime import date
 
 from rest_framework import viewsets
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -149,3 +150,28 @@ class AdminShiftViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAdmin,)
     serializer_class = ShiftSerializer
     queryset = Shift.objects.all()
+
+    def _clear_catalog_cache(self):
+        from django.core.cache import cache
+
+        cache.delete("api:shifts:list")
+
+    def perform_create(self, serializer):
+        serializer.save()
+        self._clear_catalog_cache()
+
+    def perform_update(self, serializer):
+        serializer.save()
+        self._clear_catalog_cache()
+
+    def perform_destroy(self, instance):
+        from django.db.models.deletion import ProtectedError
+
+        try:
+            instance.delete()
+        except ProtectedError as exc:
+            raise ValidationError(
+                "This shift has memberships booked against it and cannot be deleted. "
+                "Deactivate it instead and add a new shift."
+            ) from exc
+        self._clear_catalog_cache()

@@ -29,21 +29,15 @@ def membership_amount(shift, months: int, plan_type: str = "monthly",
 
     Fixed daily/weekly prices come from PLAN_PRICES; monthly is
     ``shift.price * months``. A duration discount is applied for multi-month
-    bookings (monthly plan only), then a premium surcharge is added when
-    applicable.
+    bookings (monthly plan only), then a premium surcharge is added for the
+    monthly plan only — 1-day and 7-day plans always cost the fixed price.
     """
     from .models import PLAN_PRICES, get_discount_percent
 
-    extra = Decimal(str(premium_extra or 0)) if is_premium else Decimal("0")
     if plan_type in PLAN_PRICES:
-        base = Decimal(PLAN_PRICES[plan_type])
-        if is_premium and extra:
-            if plan_type == "daily":
-                base += (extra / Decimal(30)).quantize(Decimal("1"))
-            else:
-                base += (extra * Decimal(7) / Decimal(30)).quantize(Decimal("1"))
-        return base
+        return Decimal(PLAN_PRICES[plan_type])
     price = shift.price * Decimal(int(months))
+    extra = Decimal(str(premium_extra or 0)) if is_premium else Decimal("0")
     if is_premium and extra:
         price += extra * Decimal(int(months))
     discount_pct = get_discount_percent(months)
@@ -271,22 +265,10 @@ def _release_membership_booking(membership):
     ).update(status="cancelled", held_until=None)
 
 
-def request_cash_payment(membership):
-    """Switch a pending membership to a cash request.
-
-    The seat stays held for 3 days (``CASH_REQUEST_TTL``) while the library
-    confirms the cash payment. Only an admin approving the membership (or the
-    member paying cash at the desk) converts it into an active pass.
-    """
+def _hold_seat_for_request(membership, expires_at):
+    """Re-hold (or extend) the member's live booking for a payment review."""
     from apps.seats.models import Booking
     from apps.seats.services import SeatHoldError, hold_seat
-
-    membership.payment_method = "cash"
-    membership.status = "pending_cash"
-    membership.cash_request_expires_at = timezone.now() + CASH_REQUEST_TTL
-    membership.save(
-        update_fields=["payment_method", "status", "cash_request_expires_at"]
-    )
 
     if membership.seat_id and membership.start_date and membership.end_date:
         booking = Booking.objects.filter(
@@ -308,21 +290,118 @@ def request_cash_payment(membership):
                 )
             except SeatHoldError:
                 logger.warning(
-                    "cash request %s could not re-hold seat %s",
+                    "payment request %s could not re-hold seat %s",
                     membership.id,
                     membership.seat_id,
                 )
                 booking = None
         if booking is not None:
-            booking.held_until = timezone.now() + CASH_REQUEST_TTL
+            booking.held_until = expires_at
             booking.save(update_fields=["held_until"])
+
+
+def request_cash_payment(membership):
+    """Switch a pending membership to a cash request.
+
+    The seat stays held for 3 days (``CASH_REQUEST_TTL``) while the library
+    confirms the cash payment. Only an admin approving the membership (or the
+    member paying cash at the desk) converts it into an active pass.
+    """
+    membership.payment_method = "cash"
+    membership.status = "pending_cash"
+    membership.cash_request_expires_at = timezone.now() + CASH_REQUEST_TTL
+    membership.save(
+        update_fields=["payment_method", "status", "cash_request_expires_at"]
+    )
+
+    _hold_seat_for_request(membership, membership.cash_request_expires_at)
 
     _send_cash_request_ack(membership)
     return membership
 
 
+def request_manual_payment(membership, transaction_id, receipt):
+    """Switch a pending membership to a QR/manual UPI payment review.
+
+    The member's transaction id and receipt screenshot are stored on the
+    Payment row and the seat is held for ``CASH_REQUEST_TTL`` while the
+    library verifies the transfer. Approving the membership converts it into
+    an active pass.
+    """
+    from .models import Payment
+
+    payment = Payment.objects.filter(membership=membership).first()
+    if payment is None:
+        payment = Payment(membership=membership, amount=membership.amount)
+    payment.method = "manual"
+    payment.transaction_id = transaction_id
+    payment.receipt = receipt
+    if payment.status not in ("paid", "refunded"):
+        payment.status = "created"
+    payment.save()
+
+    membership.payment_method = "manual"
+    membership.status = "pending_approval"
+    membership.cash_request_expires_at = timezone.now() + CASH_REQUEST_TTL
+    membership.save(
+        update_fields=["payment_method", "status", "cash_request_expires_at"]
+    )
+
+    _hold_seat_for_request(membership, membership.cash_request_expires_at)
+    _send_manual_payment_ack(membership)
+    return membership
+
+
+def _payment_for(membership):
+    try:
+        return membership.payment
+    except Exception:
+        return None
+
+
+def approve_pending_payment(membership):
+    """Approve a cash or QR/manual payment review and activate the pass.
+
+    A manual Payment is captured (paid) before activation so revenue and the
+    confirmation email reflect the verified transfer.
+    """
+    payment = _payment_for(membership)
+    if payment is not None and payment.method == "manual" and payment.status != "paid":
+        if payment.transition_to("paid"):
+            payment.paid_at = timezone.now()
+            payment.save(update_fields=["status", "paid_at"])
+    return activate_membership(membership)
+
+
+def reject_pending_payment(membership, reason=""):
+    """Reject a cash or QR/manual payment review and release the seat.
+
+    The failure reason is recorded on the manual Payment and the membership is
+    cancelled so the member can start a fresh booking.
+    """
+    payment = _payment_for(membership)
+    if (
+        payment is not None
+        and payment.method == "manual"
+        and payment.status not in ("paid", "failed", "refunded")
+        and payment.transition_to("failed")
+    ):
+        payment.admin_note = (reason or "").strip()[:255]
+        payment.save(update_fields=["status", "admin_note"])
+
+    _release_membership_booking(membership)
+    membership.status = "cancelled"
+    membership.cash_request_expires_at = None
+    membership.save(update_fields=["status", "cash_request_expires_at"])
+
+    reason = (reason or "").strip()
+    if reason:
+        _send_payment_rejection(membership, reason)
+    return membership
+
+
 def expire_cash_requests():
-    """Cancel cash requests not approved by the library within 3 days.
+    """Cancel cash/QR payment requests not approved by the library within 3 days.
 
     Releases the held seat and marks the membership cancelled so the slot
     frees up for other members.
@@ -331,7 +410,7 @@ def expire_cash_requests():
 
     now = timezone.now()
     stale = Membership.objects.filter(
-        status="pending_cash",
+        status__in=("pending_cash", "pending_approval"),
         cash_request_expires_at__isnull=False,
         cash_request_expires_at__lte=now,
     )
@@ -343,7 +422,7 @@ def expire_cash_requests():
         membership.save(update_fields=["status", "cash_request_expires_at"])
         count += 1
     if count:
-        logger.info("expired %s cash request(s)", count)
+        logger.info("expired %s cash/QR payment request(s)", count)
     return count
 
 
@@ -359,6 +438,42 @@ def _send_cash_request_ack(membership):
     notify_membership(
         membership,
         type_="cash_request",
+        subject=subject,
+        body=body,
+        html=html,
+    )
+
+
+def _send_manual_payment_ack(membership):
+    from apps.notifications.emails import build_manual_payment_acknowledgement
+    from apps.notifications.service import notify_membership
+
+    try:
+        subject, body, html = build_manual_payment_acknowledgement(membership)
+    except Exception:
+        logger.exception("could not build manual-payment ack for membership %s", membership.id)
+        return
+    notify_membership(
+        membership,
+        type_="manual_payment_request",
+        subject=subject,
+        body=body,
+        html=html,
+    )
+
+
+def _send_payment_rejection(membership, reason):
+    from apps.notifications.emails import build_payment_rejection
+    from apps.notifications.service import notify_membership
+
+    try:
+        subject, body, html = build_payment_rejection(membership, reason)
+    except Exception:
+        logger.exception("could not build payment-rejection email for membership %s", membership.id)
+        return
+    notify_membership(
+        membership,
+        type_="payment_rejected",
         subject=subject,
         body=body,
         html=html,

@@ -55,14 +55,16 @@ class RegisterView(APIView):
                 fields=serializer.errors,
             )
         user = serializer.save(ip_address=_client_ip(request))
+        otp_sent = False
         try:
-            code = issue_otp(user, purpose="verify_email")
-            send_otp_email(user, code, purpose="verify_email")
+            otp = issue_otp(user, purpose="verify_email")
+            otp_sent = send_otp_email(user, otp, purpose="verify_email")
         except OTPCooldownError:
             pass
         return Response(
             {
                 "message": "Account created. Verify your email with the code we sent.",
+                "otp_sent": otp_sent,
                 **_auth_payload(user, request),
             },
             status=status.HTTP_201_CREATED,
@@ -179,11 +181,17 @@ class RequestOTPView(APIView):
             user.gender = gender
             user.save(update_fields=["gender"])
         try:
-            code = issue_otp(user, purpose="verify_email")
-            send_otp_email(user, code, purpose="verify_email")
-        except OTPCooldownError:
-            pass
-        return Response({"message": "A code was sent to your email."})
+            otp = issue_otp(user, purpose="verify_email")
+            sent = send_otp_email(user, otp, purpose="verify_email")
+        except OTPCooldownError as exc:
+            return Response(
+                {
+                    "message": "A code is already active for this email.",
+                    "otp_sent": False,
+                    "resend_after": exc.retry_after,
+                }
+            )
+        return Response({"message": "A code was sent to your email.", "otp_sent": sent})
 
 
 class VerifyOTPView(APIView):
@@ -218,12 +226,17 @@ class PhoneRequestOTPView(APIView):
         if user is None:
             return Response({"message": "If that number is registered, a code was sent."})
         try:
-            code = issue_otp(user, purpose="verify_phone")
+            otp = issue_otp(user, purpose="verify_phone")
             from apps.notifications.channels import SmsChannel
 
-            SmsChannel().send(user, "OTP", f"Your library verification code is: {code}")
-        except OTPCooldownError:
-            pass
+            SmsChannel().send(user, "OTP", f"Your library verification code is: {otp.code}")
+        except OTPCooldownError as exc:
+            return Response(
+                {
+                    "message": "If that number is registered, a code was sent.",
+                    "resend_after": exc.retry_after,
+                }
+            )
         return Response({"message": "If that number is registered, a code was sent."})
 
 
@@ -257,11 +270,19 @@ class ForgotPasswordView(APIView):
         if user is None:
             return Response({"message": "If that email exists, a reset code was sent."})
         try:
-            code = issue_otp(user, purpose="reset_password")
-            send_otp_email(user, code, purpose="reset_password")
-        except OTPCooldownError:
-            pass
-        return Response({"message": "If that email exists, a reset code was sent."})
+            otp = issue_otp(user, purpose="reset_password")
+            sent = send_otp_email(user, otp, purpose="reset_password")
+        except OTPCooldownError as exc:
+            return Response(
+                {
+                    "message": "If that email exists, a reset code was sent.",
+                    "otp_sent": False,
+                    "resend_after": exc.retry_after,
+                }
+            )
+        return Response(
+            {"message": "If that email exists, a reset code was sent.", "otp_sent": sent}
+        )
 
 
 class ResetPasswordView(APIView):
