@@ -5,6 +5,7 @@ from pathlib import Path
 
 from django.contrib.auth import authenticate
 from django.core.files.base import ContentFile
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -144,11 +145,24 @@ class UserSerializer(serializers.ModelSerializer):
             "purpose", "class_name",
             "wifi_device_name", "wifi_device_name_2", "ip_address", "role",
             "is_email_verified", "date_joined",
+            "promo_consent", "promo_consent_at",
         )
         read_only_fields = (
             "id", "email", "role", "ip_address", "is_email_verified", "date_joined",
             "photo_url", "aadhar_document_url", "aadhar_document_back_url",
+            "promo_consent_at",
         )
+
+    def update(self, instance, validated_data):
+        # Stamp the moment consent is granted; clear it if consent is revoked
+        # through the profile form.
+        if "promo_consent" in validated_data:
+            consent = validated_data["promo_consent"]
+            if consent and not instance.promo_consent:
+                instance.promo_consent_at = timezone.now()
+            elif not consent:
+                instance.promo_consent_at = None
+        return super().update(instance, validated_data)
 
     def get_photo_url(self, obj):
         request = self.context.get("request")

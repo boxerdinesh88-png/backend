@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import models
@@ -52,6 +52,15 @@ PAYMENT_TRANSITIONS = {
 DAYS_PER_MONTH = 30
 
 
+def plan_duration(plan_type, months):
+    """Length of a pass: one day, one week, or 30 days per month."""
+    if plan_type == "daily":
+        return timedelta(days=1)
+    if plan_type == "weekly":
+        return timedelta(days=7)
+    return timedelta(days=DAYS_PER_MONTH * max(int(months or 1), 1))
+
+
 class Membership(models.Model):
     """A paid pass for one time block for a chosen duration.
 
@@ -78,6 +87,10 @@ class Membership(models.Model):
     )
     duration_months = models.PositiveSmallIntegerField(default=1)
     is_premium = models.BooleanField(default=False)
+    # True when the member chose "Renew / extend": the running pass on the same
+    # time block is replaced and its leftover days carry over. A plain "New
+    # membership" always starts fresh, even on the same time block.
+    is_renewal = models.BooleanField(default=False)
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0"))
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
@@ -109,17 +122,20 @@ class Membership(models.Model):
             return None
         return (self.end_date - date.today()).days
 
-    def compute_dates(self, start=None):
-        from datetime import timedelta
+    def compute_dates(self, start=None, carry_from=None):
+        """Set the pass window.
 
+        When ``carry_from`` is a still-running pass of the same member, the
+        days it has left are added to the new pass, so renewing early never
+        wastes already-paid time (renew on day 15 of a 30-day pass and the new
+        pass ends on day 30 + its own duration).
+        """
         start = start or date.today()
         self.start_date = start
-        if self.plan_type == "daily":
-            self.end_date = start + timedelta(days=1)
-        elif self.plan_type == "weekly":
-            self.end_date = start + timedelta(days=7)
-        else:
-            self.end_date = start + timedelta(days=DAYS_PER_MONTH * self.duration_months)
+        end = start + plan_duration(self.plan_type, self.duration_months)
+        if carry_from is not None and carry_from.end_date and carry_from.end_date > start:
+            end += carry_from.end_date - start
+        self.end_date = end
         return self.start_date, self.end_date
 
 

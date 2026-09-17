@@ -1,6 +1,6 @@
 import csv
 import logging
-from datetime import date, timedelta
+from datetime import date
 
 from django.db.models import Q
 from django.http import HttpResponse
@@ -14,7 +14,7 @@ from apps.core.exceptions import error_response
 from apps.core.permissions import IsAdmin
 from apps.library.models import Seat, Shift
 
-from .models import DurationDiscount, Membership, PaymentSettings, get_discount_percent
+from .models import DurationDiscount, Membership, PaymentSettings, get_discount_percent, plan_duration
 from .serializers import (
     DurationDiscountSerializer,
     ManualPaymentSubmitSerializer,
@@ -26,6 +26,7 @@ from .services import (
     _release_membership_booking,
     PaymentGatewayError,
     WebhookSignatureError,
+    active_running_membership,
     create_payment_order,
     membership_amount,
     payment_status_report,
@@ -102,13 +103,19 @@ class MembershipViewSet(viewsets.GenericViewSet):
 
         plan_type = data.get("plan_type", "monthly")
         months = data.get("duration_months", 1) if plan_type == "monthly" else 1
+        is_renewal = bool(data.get("renew", False))
+
         start_date = date.today()
-        if plan_type == "daily":
-            end_date = start_date + timedelta(days=1)
-        elif plan_type == "weekly":
-            end_date = start_date + timedelta(days=7)
-        else:
-            end_date = start_date + timedelta(days=30 * months)
+        end_date = start_date + plan_duration(plan_type, months)
+        # "Renew / extend" on the same time block adds that pass's leftover
+        # days; a plain "New membership" — and a renewal of any other block —
+        # always starts fresh. A member can hold several passes at once, one
+        # per time block, so any block can be picked without error; a new pass
+        # simply replaces an earlier pass on that same block once it is paid.
+        if is_renewal:
+            carry = active_running_membership(request.user, shift=shift)
+            if carry and carry.end_date and carry.end_date > start_date:
+                end_date += carry.end_date - start_date
 
         seat = data.get("seat")
         if seat:
@@ -138,6 +145,7 @@ class MembershipViewSet(viewsets.GenericViewSet):
             plan_type=plan_type,
             duration_months=months,
             is_premium=is_premium,
+            is_renewal=is_renewal,
             discount_percent=discount_percent,
             amount=amount,
             start_date=start_date,

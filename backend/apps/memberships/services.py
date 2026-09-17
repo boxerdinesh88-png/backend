@@ -84,11 +84,31 @@ def recompute_membership_amount(membership):
     return amount
 
 
+def active_running_membership(member, shift=None, exclude_pk=None):
+    """The member's active pass that has not ended yet, if any.
+
+    Only the same time block continues a pass: renewing on the same ``shift``
+    carries its leftover days over, while choosing a different block is a
+    fresh membership and keeps nothing.
+    """
+    from .models import Membership
+
+    qs = Membership.objects.filter(
+        member=member, status="active", end_date__gte=timezone.localdate()
+    )
+    if shift is not None:
+        qs = qs.filter(shift=shift)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    return qs.order_by("-end_date").first()
+
+
 def seat_is_available(seat, shift, start_date, end_date, exclude_membership=None, user=None):
     """True when no active membership *or* active seat booking blocks `seat`.
 
     Bookings (held/confirmed by someone else) lock the seat for the requested
-    shift + date range, mirroring what the 3D map shows in real time.
+    shift + date range, mirroring what the 3D map shows in real time. A
+    member's own running pass is ignored so a renewal can keep the same seat.
     """
     from .models import Membership
 
@@ -100,6 +120,8 @@ def seat_is_available(seat, shift, start_date, end_date, exclude_membership=None
     ).select_related("shift")
     if exclude_membership:
         overlapping = overlapping.exclude(pk=exclude_membership.pk)
+    if user is not None and getattr(user, "is_authenticated", False):
+        overlapping = overlapping.exclude(member=user)
     for membership in overlapping:
         if membership.shift.overlaps(shift):
             return False
@@ -120,8 +142,8 @@ def seats_availability(seats, shift, start_date, end_date, user=None):
     Semantics are identical to the per-seat helpers:
 
     - a seat is unavailable when an overlapping *active* membership on the
-      same seat has an overlapping shift and date range (own memberships count
-      too, matching the existing behaviour);
+      same seat has an overlapping shift and date range (the member's own
+      running pass is excluded so they can renew the same seat);
     - a seat is unavailable when someone else holds a live booking (held with
       ``held_until`` in the future) or has a confirmed booking for the slot.
 
@@ -142,8 +164,14 @@ def seats_availability(seats, shift, start_date, end_date, user=None):
         status="active",
         start_date__lte=end_date,
         end_date__gte=start_date,
-    ).values_list("seat_id", "shift__start_time", "shift__end_time")
-    for seat_id, shift_start, shift_end in overlapping:
+    )
+    if user is not None and user.is_authenticated:
+        # A member's own running pass does not hide their seat from them, so
+        # they can select it again while renewing.
+        overlapping = overlapping.exclude(member=user)
+    for seat_id, shift_start, shift_end in overlapping.values_list(
+        "seat_id", "shift__start_time", "shift__end_time"
+    ):
         if shift_start < shift.end_time and shift_end > shift.start_time:
             available[str(seat_id)] = False
 
@@ -211,19 +239,38 @@ def assign_seat(membership, seat):
     return True, ""
 
 
+def _same_block_running(membership):
+    """The member's running pass on this membership's time block, if any."""
+    return active_running_membership(
+        membership.member, shift=membership.shift, exclude_pk=membership.pk
+    )
+
+
 def activate_membership(membership):
     """Mark a membership active, compute dates and lock its seat.
 
-    Any other active membership of the same member is superseded (cancelled)
-    so a member never holds two live memberships at once.
+    A member may hold several live passes, one per time block (e.g. Morning +
+    Evening). Starting a pass never errors, even on a block the member already
+    holds: the earlier pass on that *same* block is superseded (cancelled) so
+    the block never ends up with two overlapping passes. Only a same-block
+    renewal carries the old pass's leftover days over; a fresh "New
+    membership" replaces it without moving any days. Passes on other blocks
+    keep running untouched.
     """
     if membership.status == "active":
         return membership
 
-    membership.compute_dates()
+    carry = _same_block_running(membership) if membership.is_renewal else None
+
+    membership.compute_dates(carry_from=carry)
     membership.status = "active"
     membership.save(update_fields=["start_date", "end_date", "status"])
 
+    # A new pass always replaces the member's earlier live pass on the *same*
+    # block so it never leaves two overlapping passes. Renewals already carried
+    # the leftover days over; a fresh "New membership" cancels the old pass
+    # outright (its remaining days are not moved). Passes on other blocks are
+    # left running.
     _supersede_prior_memberships(membership)
 
     if membership.seat_id:
@@ -486,10 +533,17 @@ def _send_payment_rejection(membership, reason):
 
 
 def _supersede_prior_memberships(membership):
+    """Cancel the member's earlier live pass on the *same* time block.
+
+    Called whenever a pass starts on a block the member already holds, so the
+    old pass gives way to the new one and a member never ends up with two
+    active passes on one block. Renewals carry the leftover days over before
+    this runs; fresh "New membership" passes do not.
+    """
     from .models import Membership
 
     prior = Membership.objects.filter(
-        member=membership.member, status="active",
+        member=membership.member, shift=membership.shift, status="active",
     ).exclude(pk=membership.pk).select_related("seat", "shift")
     for old in prior:
         _release_membership_booking(old)
@@ -497,11 +551,22 @@ def _supersede_prior_memberships(membership):
 
 
 def _is_renewal(membership) -> bool:
-    """A renewal is a new pass for a member who already had an activated one."""
+    """A renewal continues a pass for the *same* time block.
+
+    Only the "Renew / extend" path sets ``is_renewal``; a plain "New
+    membership" always gets the new-seat confirmation, and choosing a
+    different time block is a fresh booking too.
+    """
     from .models import Membership
 
+    if not membership.is_renewal:
+        return False
     return (
-        Membership.objects.filter(member=membership.member, start_date__isnull=False)
+        Membership.objects.filter(
+            member=membership.member,
+            shift=membership.shift,
+            start_date__isnull=False,
+        )
         .exclude(pk=membership.pk)
         .exists()
     )

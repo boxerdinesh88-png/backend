@@ -25,11 +25,11 @@ class UserAdmin(BaseUserAdmin):
     ordering = ("-date_joined",)
     list_display = (
         "email", "name", "gender", "class_name", "role", "photo_preview",
-        "aadhar_preview", "ip_address", "is_active", "date_joined",
+        "aadhar_preview", "promo_consent", "ip_address", "is_active", "date_joined",
     )
     search_fields = ("email", "name", "phone")
-    list_filter = ("role", "gender", "is_active")
-    readonly_fields = ("date_joined", "updated_at", "photo_preview", "aadhar_preview", "aadhar_back_preview")
+    list_filter = ("role", "gender", "is_active", "promo_consent")
+    readonly_fields = ("date_joined", "updated_at", "photo_preview", "aadhar_preview", "aadhar_back_preview", "promo_consent_at")
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         ("Profile", {"fields": ("name", "phone", "gender", "role")}),
@@ -37,6 +37,7 @@ class UserAdmin(BaseUserAdmin):
         ("Study", {"fields": ("class_name", "purpose")}),
         ("Device", {"fields": ("wifi_device_name", "ip_address")}),
         ("Verification", {"fields": ("is_email_verified",)}),
+        ("Promotional consent", {"fields": ("promo_consent", "promo_consent_at")}),
         ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
     )
     add_fieldsets = (

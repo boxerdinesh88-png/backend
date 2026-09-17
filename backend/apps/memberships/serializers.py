@@ -54,6 +54,7 @@ class MembershipCreateSerializer(serializers.Serializer):
     )
     duration_months = serializers.IntegerField(min_value=1, max_value=12, default=1)
     is_premium = serializers.BooleanField(required=False, default=False)
+    renew = serializers.BooleanField(required=False, default=False)
 
     def validate_seat(self, seat):
         if seat and not seat.is_active:
@@ -70,6 +71,7 @@ class MembershipSerializer(serializers.ModelSerializer):
         model = Membership
         fields = (
             "id", "shift", "seat", "plan_type", "duration_months", "is_premium",
+            "is_renewal",
             "discount_percent", "start_date", "end_date", "status", "payment_method",
             "cash_request_expires_at", "amount", "days_left", "created_at", "payment",
         )
@@ -88,7 +90,7 @@ class MembershipAdminSerializer(serializers.ModelSerializer):
         model = Membership
         fields = (
             "id", "member", "member_name", "shift",
-            "seat", "plan_type", "duration_months", "is_premium",
+            "seat", "plan_type", "duration_months", "is_premium", "is_renewal",
             "discount_percent", "start_date", "end_date", "status",
             "payment_method", "cash_request_expires_at", "amount",
             "days_left", "created_at", "payment", "notification_logs",

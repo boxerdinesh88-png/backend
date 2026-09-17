@@ -36,6 +36,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     wifi_device_name_2 = models.CharField(max_length=160, blank=True, default="")
     ip_address = models.GenericIPAddressField(null=True, blank=True)
 
+    # Voluntary consent to use the member's name, photograph, testimonials and
+    # academic achievements for library promotions. Timestamped as proof and
+    # withdrawable later by written request to the library management.
+    promo_consent = models.BooleanField(default=False)
+    promo_consent_at = models.DateTimeField(null=True, blank=True)
+
     role = models.CharField(max_length=20, choices=ROLES, default="member")
     is_email_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)

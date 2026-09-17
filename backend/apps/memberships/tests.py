@@ -10,10 +10,12 @@ Covers the production guarantees:
 import hashlib
 import hmac as hmac_lib
 import json
+from datetime import time, timedelta
 from unittest import mock
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.accounts.models import User
@@ -22,9 +24,12 @@ from apps.library.models import Seat, Shift
 from .models import Membership, Payment, WebhookEvent
 from .services import (
     WebhookSignatureError,
+    _is_renewal,
+    activate_membership,
     create_payment_order,
     mark_payment_captured,
     process_webhook_event,
+    seat_is_available,
     verify_and_activate,
 )
 
@@ -332,3 +337,218 @@ class PaymentEndpointsAPITestCase(APITestCase):
             HTTP_X_RAZORPAY_SIGNATURE=webhook_signature(b'{"event": "ping"}'),
         )
         self.assertEqual(res.status_code, 200)
+
+
+class RenewalCarryOverTestCase(TestCase):
+    """Renewing early on the same time block carries leftover days over."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="renew@example.com", password="pass1234", name="Renew Member"
+        )
+        self.shift = Shift.objects.create(
+            name="Evening", start_time=time(17, 0), end_time=time(21, 0), price=500
+        )
+        self.other_shift = Shift.objects.create(
+            name="Morning", start_time=time(6, 0), end_time=time(10, 0), price=400
+        )
+        self.seat = Seat.objects.create(seat_number="R1", section="common")
+        self.today = timezone.localdate()
+        self.current_end = self.today + timedelta(days=15)
+        self.current = Membership.objects.create(
+            member=self.user,
+            shift=self.shift,
+            seat=self.seat,
+            plan_type="monthly",
+            duration_months=1,
+            amount=500,
+            status="active",
+            start_date=self.today - timedelta(days=15),
+            end_date=self.current_end,
+        )
+
+    def test_activation_adds_leftover_days(self):
+        renewal = Membership.objects.create(
+            member=self.user, shift=self.shift, seat=self.seat,
+            plan_type="monthly", duration_months=1, amount=500, is_renewal=True,
+        )
+        activate_membership(renewal)
+        renewal.refresh_from_db()
+        self.assertEqual(renewal.start_date, self.today)
+        # 15 leftover days + a fresh 30-day month.
+        self.assertEqual(renewal.end_date, self.current_end + timedelta(days=30))
+        self.current.refresh_from_db()
+        self.assertEqual(self.current.status, "cancelled")
+
+    def test_no_leftover_when_previous_pass_ended(self):
+        self.current.status = "expired"
+        self.current.save(update_fields=["status"])
+        renewal = Membership.objects.create(
+            member=self.user, shift=self.shift,
+            plan_type="monthly", duration_months=1, amount=500,
+        )
+        activate_membership(renewal)
+        renewal.refresh_from_db()
+        self.assertEqual(renewal.end_date, self.today + timedelta(days=30))
+
+    def test_different_time_block_starts_fresh(self):
+        # A member can hold several passes at once, one per block: a fresh
+        # pass on another block does not affect the running Evening pass.
+        switched = Membership.objects.create(
+            member=self.user, shift=self.other_shift,
+            plan_type="monthly", duration_months=1, amount=400,
+        )
+        activate_membership(switched)
+        switched.refresh_from_db()
+        self.assertEqual(switched.end_date, self.today + timedelta(days=30))
+        self.current.refresh_from_db()
+        self.assertEqual(self.current.status, "active")
+
+    def test_fresh_pass_on_same_block_supersedes_old_without_carry(self):
+        # A fresh "New membership" on a block the member already holds is not
+        # an error: once paid it replaces the old pass on that same block
+        # without carrying its leftover days over.
+        duplicate = Membership.objects.create(
+            member=self.user, shift=self.shift,
+            plan_type="monthly", duration_months=1, amount=500,
+        )
+        activate_membership(duplicate)
+        duplicate.refresh_from_db()
+        self.assertEqual(duplicate.status, "active")
+        self.assertEqual(duplicate.end_date, self.today + timedelta(days=30))
+        self.current.refresh_from_db()
+        self.assertEqual(self.current.status, "cancelled")
+
+    def test_own_seat_free_for_owner_but_blocked_for_others(self):
+        self.assertTrue(
+            seat_is_available(
+                self.seat, self.shift, self.today, self.today + timedelta(days=30),
+                user=self.user,
+            )
+        )
+        stranger = User.objects.create_user(
+            email="stranger-re@example.com", password="pass1234", name="Stranger"
+        )
+        self.assertFalse(
+            seat_is_available(
+                self.seat, self.shift, self.today, self.today + timedelta(days=30),
+                user=stranger,
+            )
+        )
+
+    def test_renewal_email_requires_same_time_block(self):
+        same_block = Membership.objects.create(
+            member=self.user, shift=self.shift, plan_type="monthly",
+            duration_months=1, amount=500, is_renewal=True,
+        )
+        self.assertTrue(_is_renewal(same_block))
+        other_block = Membership.objects.create(
+            member=self.user, shift=self.other_shift, plan_type="monthly",
+            duration_months=1, amount=400,
+        )
+        self.assertFalse(_is_renewal(other_block))
+        fresh_same_block = Membership.objects.create(
+            member=self.user, shift=self.shift, plan_type="monthly",
+            duration_months=1, amount=500,
+        )
+        self.assertFalse(_is_renewal(fresh_same_block))
+
+
+class RenewalCreateAPITestCase(APITestCase):
+    """The create endpoint must advertise the carried-over window up front."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="renew-api@example.com", password="pass1234", name="Renew API"
+        )
+        self.client.force_authenticate(self.user)
+        self.shift = Shift.objects.create(
+            name="Evening", start_time=time(17, 0), end_time=time(21, 0), price=500
+        )
+        self.seat = Seat.objects.create(seat_number="R2", section="common")
+        self.other_shift = Shift.objects.create(
+            name="Morning", start_time=time(6, 0), end_time=time(10, 0), price=400
+        )
+        self.today = timezone.localdate()
+        self.current_end = self.today + timedelta(days=15)
+        Membership.objects.create(
+            member=self.user, shift=self.shift, seat=self.seat,
+            plan_type="monthly", duration_months=1, amount=500,
+            status="active", start_date=self.today - timedelta(days=15),
+            end_date=self.current_end,
+        )
+
+    def test_create_extends_end_date_for_running_pass(self):
+        res = self.client.post(
+            "/api/v1/memberships/",
+            {
+                "shift": self.shift.id,
+                "seat": self.seat.id,
+                "plan_type": "monthly",
+                "duration_months": 1,
+                "renew": True,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["start_date"], str(self.today))
+        self.assertEqual(res.data["end_date"], str(self.current_end + timedelta(days=30)))
+
+    def test_create_allows_new_membership_on_any_block_while_active(self):
+        # "New membership" is always allowed — even on a block the member
+        # already holds — no error. It starts fresh (no leftover days); the
+        # running pass only gives way once the new one is actually paid.
+        same = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly", "duration_months": 1},
+            format="json",
+        )
+        self.assertEqual(same.status_code, 201)
+        self.assertEqual(same.data["start_date"], str(self.today))
+        self.assertEqual(same.data["end_date"], str(self.today + timedelta(days=30)))
+        other = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.other_shift.id, "plan_type": "monthly", "duration_months": 1},
+            format="json",
+        )
+        self.assertEqual(other.status_code, 201)
+        self.assertEqual(other.data["end_date"], str(self.today + timedelta(days=30)))
+        # Only the newest unpaid draft survives (older drafts are cleared on
+        # create); the running Evening pass itself is untouched.
+        self.assertEqual(Membership.objects.filter(member=self.user, status="pending_payment").count(), 1)
+        self.assertTrue(Membership.objects.filter(member=self.user, shift=self.shift, status="active").exists())
+
+    def test_create_renewal_of_other_block_starts_fresh(self):
+        # Renew / extend only continues the *same* block; renewing a different
+        # block while a pass is live creates a fresh pass without carrying any
+        # leftover days — the old block's days are not carried over.
+        res = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.other_shift.id, "plan_type": "monthly",
+             "duration_months": 1, "renew": True},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["start_date"], str(self.today))
+        self.assertEqual(res.data["end_date"], str(self.today + timedelta(days=30)))
+
+    def test_create_without_running_pass_keeps_plain_duration(self):
+        Membership.objects.update(status="expired")
+        res = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly", "duration_months": 1},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["end_date"], str(self.today + timedelta(days=30)))
+
+    def test_create_on_other_block_after_expiry_starts_fresh(self):
+        # Once the running pass ends, a fresh pass on another block is valid.
+        Membership.objects.update(status="expired")
+        res = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.other_shift.id, "plan_type": "monthly", "duration_months": 1},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["end_date"], str(self.today + timedelta(days=30)))
