@@ -404,10 +404,10 @@ class RenewalCarryOverTestCase(TestCase):
         self.current.refresh_from_db()
         self.assertEqual(self.current.status, "active")
 
-    def test_fresh_pass_on_same_block_supersedes_old_without_carry(self):
-        # A fresh "New membership" on a block the member already holds is not
-        # an error: once paid it replaces the old pass on that same block
-        # without carrying its leftover days over.
+    def test_fresh_pass_on_same_block_keeps_old_running(self):
+        # A fresh "New membership" on a block the member already holds never
+        # cancels the old pass: both stay active, the new one starting fresh
+        # (no leftover days carried) and the old one running until it expires.
         duplicate = Membership.objects.create(
             member=self.user, shift=self.shift,
             plan_type="monthly", duration_months=1, amount=500,
@@ -417,7 +417,7 @@ class RenewalCarryOverTestCase(TestCase):
         self.assertEqual(duplicate.status, "active")
         self.assertEqual(duplicate.end_date, self.today + timedelta(days=30))
         self.current.refresh_from_db()
-        self.assertEqual(self.current.status, "cancelled")
+        self.assertEqual(self.current.status, "active")
 
     def test_own_seat_free_for_owner_but_blocked_for_others(self):
         self.assertTrue(

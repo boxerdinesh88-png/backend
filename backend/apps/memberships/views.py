@@ -109,9 +109,9 @@ class MembershipViewSet(viewsets.GenericViewSet):
         end_date = start_date + plan_duration(plan_type, months)
         # "Renew / extend" on the same time block adds that pass's leftover
         # days; a plain "New membership" — and a renewal of any other block —
-        # always starts fresh. A member can hold several passes at once, one
-        # per time block, so any block can be picked without error; a new pass
-        # simply replaces an earlier pass on that same block once it is paid.
+        # always starts fresh. A member can hold several passes at once (even
+        # on the same block), so any block can be picked without error; only a
+        # same-block renewal replaces that block's earlier pass once it is paid.
         if is_renewal:
             carry = active_running_membership(request.user, shift=shift)
             if carry and carry.end_date and carry.end_date > start_date:

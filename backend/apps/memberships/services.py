@@ -249,13 +249,11 @@ def _same_block_running(membership):
 def activate_membership(membership):
     """Mark a membership active, compute dates and lock its seat.
 
-    A member may hold several live passes, one per time block (e.g. Morning +
-    Evening). Starting a pass never errors, even on a block the member already
-    holds: the earlier pass on that *same* block is superseded (cancelled) so
-    the block never ends up with two overlapping passes. Only a same-block
-    renewal carries the old pass's leftover days over; a fresh "New
-    membership" replaces it without moving any days. Passes on other blocks
-    keep running untouched.
+    A member may hold several live passes and they never cancel each other: a
+    fresh "New membership" on any block (even one the member already holds)
+    leaves every other pass running, so passes can even overlap on the same
+    time block. Only a same-block renewal touches an existing pass — it carries
+    the old pass's leftover days over and replaces it.
     """
     if membership.status == "active":
         return membership
@@ -266,12 +264,11 @@ def activate_membership(membership):
     membership.status = "active"
     membership.save(update_fields=["start_date", "end_date", "status"])
 
-    # A new pass always replaces the member's earlier live pass on the *same*
-    # block so it never leaves two overlapping passes. Renewals already carried
-    # the leftover days over; a fresh "New membership" cancels the old pass
-    # outright (its remaining days are not moved). Passes on other blocks are
-    # left running.
-    _supersede_prior_memberships(membership)
+    # Only a same-block renewal replaces the member's earlier live pass on that
+    # block (after carrying its leftover days over). A plain "New membership"
+    # never cancels anything — old passes keep running until they expire.
+    if membership.is_renewal:
+        _supersede_prior_memberships(membership)
 
     if membership.seat_id:
         ok, _ = assign_seat(membership, membership.seat)
@@ -535,10 +532,9 @@ def _send_payment_rejection(membership, reason):
 def _supersede_prior_memberships(membership):
     """Cancel the member's earlier live pass on the *same* time block.
 
-    Called whenever a pass starts on a block the member already holds, so the
-    old pass gives way to the new one and a member never ends up with two
-    active passes on one block. Renewals carry the leftover days over before
-    this runs; fresh "New membership" passes do not.
+    Called for same-block renewals only: the old pass gives way to the renewal
+    (whose dates already carry the leftover days) so the block never stacks
+    overlapping renewal passes. Fresh "New membership" passes never cancel.
     """
     from .models import Membership
 
