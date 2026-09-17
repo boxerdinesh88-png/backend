@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Seat Confirmed</title>
+  <title>Membership Renewed</title>
 </head>
 <body style="margin:0;padding:0;background:#eef2f7;font-family:'Segoe UI',Arial,Helvetica,sans-serif;">
   <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
@@ -13,25 +13,26 @@
            style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
 
       <tr>
-        <td style="background:linear-gradient(135deg,#1e3a8a,#0f766e);padding:28px 32px;color:#ffffff;">
+        <td style="background:linear-gradient(135deg,#0f766e,#1e3a8a);padding:28px 32px;color:#ffffff;">
           <div style="font-size:22px;font-weight:700;letter-spacing:0.5px;">Phahendra Babu Library</div>
-          <div style="font-size:13px;opacity:0.85;margin-top:2px;">Premium Seat Booking</div>
+          <div style="font-size:13px;opacity:0.85;margin-top:2px;">Membership Renewed</div>
         </td>
       </tr>
 
       <tr>
         <td style="padding:32px;">
-          <h1 style="margin:0 0 6px;font-size:21px;color:#0f172a;">Your seat is confirmed, {{ member_name }}!</h1>
+          <h1 style="margin:0 0 6px;font-size:21px;color:#0f172a;">Your membership is renewed, {{ member_name }}!</h1>
           <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#475569;">
-            Thank you for booking at Phahendra Babu Library. Please keep this email — it is your
-            booking confirmation. Your seat is reserved automatically every day for your time block.
+            Thank you for continuing with Phahendra Babu Library. Your pass has been renewed and
+            your seat stays reserved for your time block — there is nothing more you need to do.
+            Please keep this email for your records.
           </p>
 
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
                  style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
             <tr>
               <td colspan="2" style="padding:14px 20px;background:#f8fafc;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;font-weight:600;">
-                Booking details
+                Renewal details
               </td>
             </tr>
             <tr>
@@ -57,19 +58,19 @@
             </tr>
             {% endif %}
             <tr>
-              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Duration</td>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Plan</td>
               <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ plan_label }}</td>
             </tr>
             <tr>
-              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Valid from</td>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">New term from</td>
               <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ start_date|date:"d M Y" }}</td>
             </tr>
             <tr>
-              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Valid until</td>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">New term until</td>
               <td style="padding:12px 20px;font-size:13px;color:#0f172a;font-weight:600;">{{ end_date|date:"d M Y" }}</td>
             </tr>
             <tr>
-              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Total paid</td>
+              <td style="padding:12px 20px;font-size:13px;color:#64748b;">Amount paid</td>
               <td style="padding:12px 20px;font-size:13px;color:#047857;font-weight:700;">&#8377;{{ amount }}</td>
             </tr>
             <tr>
@@ -85,9 +86,8 @@
           </table>
 
           <p style="margin:24px 0 0;font-size:13px;line-height:1.7;color:#475569;">
-            On your first visit, show your name or this booking ID at the front desk to claim your seat.
-            You can also view your booking anytime from your
-            <a href="{{ dashboard_url }}" style="color:#0f766e;font-weight:600;">your booking dashboard</a>.
+            You can view or manage your membership anytime from your
+            <a href="{{ dashboard_url }}" style="color:#0f766e;font-weight:600;text-decoration:none;">booking dashboard</a>.
           </p>
         </td>
       </tr>

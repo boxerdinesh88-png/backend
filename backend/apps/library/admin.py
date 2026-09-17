@@ -18,7 +18,7 @@ class ShiftAdmin(admin.ModelAdmin):
 
 @admin.register(Seat)
 class SeatAdmin(admin.ModelAdmin):
-    list_display = ("seat_number", "zone", "section", "grid_col", "grid_row", "is_girls_only", "is_premium", "premium_extra", "is_active")
+    list_display = ("seat_number", "zone", "section", "grid_col", "grid_row", "is_girls_only", "is_premium", "premium_percent", "is_active")
     list_filter = ("zone", "section", "is_girls_only", "is_premium", "is_active")
-    list_editable = ("is_girls_only", "is_premium", "premium_extra", "is_active")
+    list_editable = ("is_girls_only", "is_premium", "premium_percent", "is_active")
     search_fields = ("seat_number",)

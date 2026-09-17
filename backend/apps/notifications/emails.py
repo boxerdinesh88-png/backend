@@ -31,7 +31,7 @@ def _membership_context(membership):
         "seat": seat.seat_number if seat else "Will be assigned",
         "section": seat.get_section_display() if seat else "",
         "premium": membership.is_premium or bool(seat and seat.is_premium),
-        "premium_extra": seat.premium_extra if (seat and (membership.is_premium or seat.is_premium)) else None,
+        "premium_percent": seat.premium_percent if (seat and (membership.is_premium or seat.is_premium)) else None,
         "months": membership.duration_months,
         "plan_label": membership.get_plan_type_display(),
         "start_date": membership.start_date,
@@ -41,6 +41,9 @@ def _membership_context(membership):
         "payment_ref": payment_ref,
         "dashboard_url": f"{settings.FRONTEND_URL}/dashboard",
         "renew_url": f"{settings.FRONTEND_URL}/membership",
+        "features_url": f"{settings.FRONTEND_URL}/#features",
+        "terms_url": f"{settings.FRONTEND_URL}/terms",
+        "help_url": f"{settings.FRONTEND_URL}/help",
         "library_phone": LIBRARY_PHONE,
         "library_email": LIBRARY_EMAIL,
         "library_address": LIBRARY_ADDRESS,
@@ -51,25 +54,6 @@ def build_membership_confirmation(membership):
     """Return (subject, plain_text, html) for the seat-confirmation email."""
     ctx = _membership_context(membership)
     subject = f"Your seat is confirmed · {ctx['shift_name']} · Phahendra Babu Library"
-    features_text = (
-        "\nFEATURES PROVIDED TO YOU:\n"
-        "-------------------------\n"
-        "a. Comfortable Study Seats\n"
-        "b. Peaceful Study Environment\n"
-        "c. Proper Lighting\n"
-        "d. High-Speed Internet\n"
-        "e. Mobile & Laptop Charging Facility\n"
-        "f. Safe Drinking Water Facility\n"
-        "g. Clean and Hygienic Washroom\n"
-        "h. Separate Seating Arrangement For Girls & Boys\n"
-        "i. Air-conditioned Study Hall\n"
-        "j. Up to 3 hours of Power Backup\n"
-        "k. CCTV Camera Security\n"
-        "l. Safe & Secure Campus\n"
-        "m. Quality Study Facility in the Village\n"
-        "n. Proper Green Refreshment & Relaxation Area\n"
-        "o. Focuses on Students Success\n"
-    )
     plain = (
         f"Hi {ctx['member_name']},\n\n"
         "Your seat at Phahendra Babu Library is confirmed!\n\n"
@@ -77,20 +61,54 @@ def build_membership_confirmation(membership):
         f"Time block : {ctx['shift_name']} ({ctx['hours']})\n"
         f"Seat       : {ctx['seat']}"
         f"{' (' + ctx['section'] + ')' if ctx['section'] else ''}\n"
-        + (f"Seat type  : PREMIUM (+₹{ctx['premium_extra']}/month)\n" if ctx["premium"] and ctx["premium_extra"] else "")
+        + (f"Seat type  : PREMIUM (+{ctx['premium_percent']}% of base price)\n" if ctx["premium"] and ctx["premium_percent"] else "")
         + f"Duration   : {ctx['plan_label']}\n"
         f"Valid      : {ctx['start_date']} → {ctx['end_date']}\n"
         f"Amount paid: ₹{ctx['amount']}\n"
         f"Payment    : {ctx['payment_method']}"
         f"{' (' + ctx['payment_ref'] + ')' if ctx['payment_ref'] else ''}\n\n"
         "Show this booking ID at the front desk to claim your seat, or view it "
-        f"anytime at {ctx['dashboard_url']}.\n"
-        f"{features_text}\n"
+        f"anytime at {ctx['dashboard_url']}.\n\n"
+        f"Features         : {ctx['features_url']}\n"
+        f"Terms of Service : {ctx['terms_url']}\n"
+        f"Help & support   : {ctx['help_url']}\n\n"
         f"Phahendra Babu Library\n{ctx['library_address']}\n"
         f"{ctx['library_phone']} · {ctx['library_email']}\n"
         "Managed by Akash Kumar"
     )
     html = render_to_string("emails/membership_confirmation.html", ctx)
+    return subject, plain, html
+
+
+def build_membership_renewal(membership):
+    """Return (subject, plain_text, html) for a renewed membership."""
+    ctx = _membership_context(membership)
+    subject = f"Your membership is renewed · {ctx['shift_name']} · Phahendra Babu Library"
+    plain = (
+        f"Hi {ctx['member_name']},\n\n"
+        "Your Phahendra Babu Library membership has been renewed successfully.\n"
+        "Your seat stays reserved for your time block — no action is needed.\n\n"
+        f"Booking ID : {ctx['booking_id']}\n"
+        f"Time block : {ctx['shift_name']} ({ctx['hours']})\n"
+        f"Seat       : {ctx['seat']}"
+        f"{' (' + ctx['section'] + ')' if ctx['section'] else ''}\n"
+        + (f"Seat type  : PREMIUM (+{ctx['premium_percent']}% of base price)\n" if ctx["premium"] and ctx["premium_percent"] else "")
+        + f"Plan       : {ctx['plan_label']}\n"
+        f"New term   : {ctx['start_date']} → {ctx['end_date']}\n"
+        f"Amount paid: ₹{ctx['amount']}\n"
+        f"Payment    : {ctx['payment_method']}"
+        f"{' (' + ctx['payment_ref'] + ')' if ctx['payment_ref'] else ''}\n\n"
+        "Thank you for continuing with Phahendra Babu Library — we're glad to "
+        "keep your seat ready for you.\n\n"
+        f"View membership  : {ctx['dashboard_url']}\n"
+        f"Features         : {ctx['features_url']}\n"
+        f"Terms of Service : {ctx['terms_url']}\n"
+        f"Help & support   : {ctx['help_url']}\n\n"
+        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"{ctx['library_phone']} · {ctx['library_email']}\n"
+        "Managed by Akash Kumar"
+    )
+    html = render_to_string("emails/membership_renewal.html", ctx)
     return subject, plain, html
 
 
@@ -118,7 +136,7 @@ def build_cash_request_acknowledgement(membership):
         f"Time block : {ctx['shift_name']} ({ctx['hours']})\n"
         f"Seat       : {ctx['seat']}"
         f"{' (' + ctx['section'] + ')' if ctx['section'] else ''}\n"
-        + (f"Seat type  : PREMIUM (+₹{ctx['premium_extra']}/month)\n" if ctx["premium"] and ctx["premium_extra"] else "")
+        + (f"Seat type  : PREMIUM (+{ctx['premium_percent']}% of base price)\n" if ctx["premium"] and ctx["premium_percent"] else "")
         + f"Duration   : {ctx['plan_label']}\n"
         f"Amount     : ₹{ctx['amount']} (to be paid in cash)\n\n"
         f"{ctx['body_note']}\n\n"
@@ -162,8 +180,8 @@ def build_manual_payment_acknowledgement(membership):
         f"Amount        : ₹{ctx['amount']}\n"
         f"Time block    : {ctx['shift_name']} ({ctx['hours']})\n"
         f"Seat          : {ctx['seat']}"
-        f"{' (' + ctx['section'] + ')' if ctx['section'] else ''}\n"
-        + (f"Seat type     : PREMIUM (+₹{ctx['premium_extra']}/month)\n" if ctx["premium"] and ctx["premium_extra"] else "")
+f"{' (' + ctx['section'] + ')' if ctx['section'] else ''}\n"
+        + (f"Seat type     : PREMIUM (+{ctx['premium_percent']}% of base price)\n" if ctx["premium"] and ctx["premium_percent"] else "")
         + f"Duration      : {ctx['plan_label']}\n\n"
         f"{ctx['body_note']}\n\n"
         f"Request status can be viewed anytime at {ctx['dashboard_url']}.\n\n"

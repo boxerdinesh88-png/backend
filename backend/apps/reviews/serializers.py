@@ -13,8 +13,13 @@ class ReviewSerializer(serializers.ModelSerializer):
         model = Review
         fields = (
             "id", "name", "display_name",
-            "rating", "atmosphere", "facilities",
-            "liked_most", "suggestion",
+            "rating",
+            "atmosphere", "cleanliness", "power_backup", "safety",
+            "facilities", "sports",
+            "ac_ventilation", "separate_seating",
+            "refreshment_area", "focused_study",
+            "recommend",
+            "liked_most", "suggestion", "message",
             "is_approved", "created_at",
         )
         read_only_fields = ("id", "is_approved", "created_at")
@@ -35,4 +40,7 @@ class ReviewSerializer(serializers.ModelSerializer):
         return self._clean_text(value)
 
     def validate_suggestion(self, value):
+        return self._clean_text(value)
+
+    def validate_message(self, value):
         return self._clean_text(value)

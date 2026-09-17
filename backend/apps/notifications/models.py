@@ -4,6 +4,7 @@ from django.db import models
 
 NOTIFICATION_TYPES = (
     ("confirmation", "Confirmation"),
+    ("renewal", "Renewal"),
     ("cash_request", "Cash Request"),
     ("expiry_warning", "Expiry Warning (7 days)"),
     ("reminder_3day", "Renewal Reminder (3 days)"),

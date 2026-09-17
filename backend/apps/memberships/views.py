@@ -129,7 +129,7 @@ class MembershipViewSet(viewsets.GenericViewSet):
         amount = membership_amount(
             shift, months, plan_type,
             is_premium=is_premium,
-            premium_extra=seat.premium_extra if seat else 0,
+            premium_percent=seat.premium_percent if seat else 0,
         )
         membership = Membership.objects.create(
             member=request.user,

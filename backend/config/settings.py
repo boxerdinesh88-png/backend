@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.analytics",
     "apps.reviews",
+    "apps.complaints",
 ]
 
 MIDDLEWARE = [
@@ -232,6 +233,7 @@ REST_FRAMEWORK = {
         "auth": "10/minute",  # per email
         "otp": "5/minute",  # per email
         "reviews": "20/hour",  # public review submissions — spam guard
+        "complaints": "10/hour",  # public complaint submissions — spam guard
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "apps.core.exceptions.custom_exception_handler",

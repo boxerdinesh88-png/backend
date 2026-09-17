@@ -46,7 +46,7 @@ class SeatSerializer(serializers.ModelSerializer):
         model = Seat
         fields = (
             "id", "seat_number", "section", "zone", "grid_col", "grid_row",
-            "is_girls_only", "is_premium", "premium_extra", "is_active",
+            "is_girls_only", "is_premium", "premium_percent", "is_active",
             "available", "selectable", "held",
         )
         read_only_fields = ("id",)
@@ -78,6 +78,6 @@ class SeatAdminSerializer(serializers.ModelSerializer):
         model = Seat
         fields = (
             "id", "seat_number", "section", "zone", "grid_col", "grid_row",
-            "is_girls_only", "is_premium", "premium_extra", "is_active",
+            "is_girls_only", "is_premium", "premium_percent", "is_active",
         )
         read_only_fields = ("id",)

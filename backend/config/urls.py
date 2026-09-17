@@ -19,6 +19,8 @@ urlpatterns = [
     path(f"{API}", include("apps.seats.urls")),
     # Public visitor reviews (anonymous survey shown on the landing page)
     path(f"{API}reviews/", include("apps.reviews.urls")),
+    # Public complaint form (anonymous; library resolves within one week)
+    path(f"{API}complaints/", include("apps.complaints.urls")),
     # Admin: CRUD + dashboard
     path(f"{API}admin/", include("apps.library.admin_urls")),
     path(f"{API}admin/", include("apps.memberships.admin_urls")),

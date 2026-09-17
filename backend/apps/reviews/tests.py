@@ -18,9 +18,19 @@ def review_payload(**over):
         "name": "Ravi Kumar",
         "rating": 5,
         "atmosphere": 4,
+        "cleanliness": 5,
+        "power_backup": 4,
+        "safety": 5,
         "facilities": 5,
+        "sports": 3,
+        "ac_ventilation": "yes",
+        "separate_seating": "partially",
+        "refreshment_area": "yes",
+        "focused_study": "yes",
+        "recommend": "definitely",
         "liked_most": "Quiet hall and a fixed window seat.",
         "suggestion": "More power sockets would help.",
+        "message": "Keep the campus green.",
     }
     payload.update(over)
     return payload
@@ -67,6 +77,35 @@ class ReviewAPITests(APITestCase):
         listed = self.client.get("/api/v1/reviews/")
         self.assertEqual(len(listed.data), 1)
         self.assertEqual(listed.data[0]["rating"], 4)
+
+    def test_full_feedback_roundtrip(self):
+        res = self.client.post("/api/v1/reviews/", review_payload(), format="json")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+        data = res.data
+        self.assertEqual(data["cleanliness"], 5)
+        self.assertEqual(data["power_backup"], 4)
+        self.assertEqual(data["safety"], 5)
+        self.assertEqual(data["sports"], 3)
+        self.assertEqual(data["ac_ventilation"], "yes")
+        self.assertEqual(data["separate_seating"], "partially")
+        self.assertEqual(data["refreshment_area"], "yes")
+        self.assertEqual(data["focused_study"], "yes")
+        self.assertEqual(data["recommend"], "definitely")
+        self.assertEqual(data["message"], "Keep the campus green.")
+
+    def test_satisfaction_choices_enforced(self):
+        bad = Review(ac_ventilation="maybe", separate_seating="ok",
+                     refreshment_area="fine", focused_study="sure",
+                     recommend="perhaps", rating=3)
+        from django.core.exceptions import ValidationError
+        from django.db.models.fields import Field
+        try:
+            bad.full_clean()
+        except ValidationError as exc:
+            self.assertIn("ac_ventilation", exc.message_dict)
+            self.assertIn("recommend", exc.message_dict)
+        else:
+            self.fail("expected ValidationError for bad choice values")
 
     def test_latest_first_and_capped_at_60(self):
         for i in range(65):

@@ -24,26 +24,31 @@ def amount_paise(amount) -> int:
 
 
 def membership_amount(shift, months: int, plan_type: str = "monthly",
-                      is_premium: bool = False, premium_extra=0):
+                      is_premium: bool = False, premium_percent=0):
     """Calculate price for a plan.
 
     Fixed daily/weekly prices come from PLAN_PRICES; monthly is
-    ``shift.price * months``. A duration discount is applied for multi-month
-    bookings (monthly plan only), then a premium surcharge is added for the
-    monthly plan only — 1-day and 7-day plans always cost the fixed price.
+    ``shift.price * months``. A premium surcharge (``premium_percent`` % of
+    the base price) is added for premium seats on every plan, and a duration
+    discount is applied for multi-month bookings (monthly plan only).
+
+    ``premium_percent`` is the percentage surcharge on the base price for
+    premium seats (e.g. 10 means +10%).
     """
     from .models import PLAN_PRICES, get_discount_percent
 
     if plan_type in PLAN_PRICES:
-        return Decimal(PLAN_PRICES[plan_type])
-    price = shift.price * Decimal(int(months))
-    extra = Decimal(str(premium_extra or 0)) if is_premium else Decimal("0")
-    if is_premium and extra:
-        price += extra * Decimal(int(months))
-    discount_pct = get_discount_percent(months)
-    if discount_pct > 0:
-        discount = (price * discount_pct / Decimal(100)).quantize(Decimal("0.01"))
-        price -= discount
+        price = Decimal(PLAN_PRICES[plan_type])
+    else:
+        price = shift.price * Decimal(int(months))
+    pct = Decimal(str(premium_percent or 0)) if is_premium else Decimal("0")
+    if is_premium and pct > 0:
+        price += price * pct / Decimal("100")
+    if plan_type == "monthly":
+        discount_pct = get_discount_percent(months)
+        if discount_pct > 0:
+            discount = (price * discount_pct / Decimal(100)).quantize(Decimal("0.01"))
+            price -= discount
     return price
 
 
@@ -59,13 +64,13 @@ def recompute_membership_amount(membership):
 
     seat = membership.seat
     premium = effective_premium(membership)
-    extra = seat.premium_extra if (premium and seat is not None) else 0
+    extra = seat.premium_percent if (premium and seat is not None) else 0
     amount = membership_amount(
         membership.shift,
         membership.duration_months,
         membership.plan_type,
         is_premium=premium,
-        premium_extra=extra,
+        premium_percent=extra,
     )
     discount = (
         get_discount_percent(membership.duration_months)
@@ -491,18 +496,39 @@ def _supersede_prior_memberships(membership):
     prior.update(status="cancelled")
 
 
+def _is_renewal(membership) -> bool:
+    """A renewal is a new pass for a member who already had an activated one."""
+    from .models import Membership
+
+    return (
+        Membership.objects.filter(member=membership.member, start_date__isnull=False)
+        .exclude(pk=membership.pk)
+        .exists()
+    )
+
+
 def _send_confirmation(membership):
-    from apps.notifications.emails import build_membership_confirmation
+    from apps.notifications.emails import (
+        build_membership_confirmation,
+        build_membership_renewal,
+    )
     from apps.notifications.service import notify_membership
 
+    if _is_renewal(membership):
+        type_ = "renewal"
+        builder = build_membership_renewal
+    else:
+        type_ = "confirmation"
+        builder = build_membership_confirmation
+
     try:
-        subject, body, html = build_membership_confirmation(membership)
+        subject, body, html = builder(membership)
     except Exception:
         logger.exception("could not build confirmation email for membership %s", membership.id)
         return
     notify_membership(
         membership,
-        type_="confirmation",
+        type_=type_,
         subject=subject,
         body=body,
         html=html,

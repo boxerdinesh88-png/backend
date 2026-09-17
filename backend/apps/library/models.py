@@ -80,7 +80,7 @@ class Seat(models.Model):
     grid_row = models.FloatField(null=True, blank=True)
     is_girls_only = models.BooleanField(default=False)
     is_premium = models.BooleanField(default=False)
-    premium_extra = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("100.00"))
+    premium_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("10.00"))
     is_active = models.BooleanField(default=True)
 
     class Meta:

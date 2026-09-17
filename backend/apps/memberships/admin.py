@@ -15,23 +15,76 @@ from .services import (
 )
 
 
+class ReceiptPreviewMixin:
+    """Renders the member's uploaded QR/UPI payment screenshot as a thumbnail."""
+
+    @admin.display(description="Payment screenshot")
+    def receipt_preview(self, obj):
+        if not obj.receipt:
+            return "—"
+        return format_html(
+            '<a href="{0}" target="_blank">'
+            '<img src="{0}" alt="Payment screenshot" '
+            'style="max-height:80px;border-radius:4px;border:1px solid #e2e8f0;" />'
+            "</a>",
+            obj.receipt.url,
+        )
+
+
+class PaymentInline(ReceiptPreviewMixin, admin.StackedInline):
+    """Shows the QR/UPI transaction id and screenshot on the membership page."""
+
+    model = Payment
+    extra = 0
+    can_delete = False
+    verbose_name = "QR / UPI payment"
+    verbose_name_plural = "QR / UPI payment"
+    readonly_fields = (
+        "transaction_id", "receipt_preview", "amount", "method", "status",
+        "razorpay_order_id", "razorpay_payment_id", "admin_note",
+        "created_at", "paid_at",
+    )
+    fields = readonly_fields
+
+
 @admin.register(Membership)
 class MembershipAdmin(admin.ModelAdmin):
     list_display = (
         "id", "member", "shift", "seat", "plan_type", "duration_months",
         "start_date", "end_date", "status", "payment_method",
-        "cash_request_expires_at", "amount", "cash_actions",
+        "cash_request_expires_at", "amount", "payment_transaction_id",
+        "payment_receipt", "cash_actions",
     )
     list_filter = ("status", "payment_method", "shift")
     search_fields = ("member__email", "member__name", "seat__seat_number")
     readonly_fields = ("created_at", "updated_at")
     autocomplete_fields = ("member", "seat")
+    list_select_related = ("member", "shift", "seat", "payment")
+    inlines = (PaymentInline,)
     actions = ("approve_cash_requests", "decline_cash_requests")
 
     # ------------------------------------------------------------- helpers
     def _decline(self, membership):
         """Cancel a pending cash/QR request and release its held seat."""
         reject_pending_payment(membership)
+
+    @admin.display(description="UPI / Txn ID")
+    def payment_transaction_id(self, obj):
+        payment = getattr(obj, "payment", None)
+        return payment.transaction_id if payment and payment.transaction_id else "—"
+
+    @admin.display(description="Payment screenshot")
+    def payment_receipt(self, obj):
+        payment = getattr(obj, "payment", None)
+        if not payment or not payment.receipt:
+            return "—"
+        return format_html(
+            '<a href="{0}" target="_blank">'
+            '<img src="{0}" alt="Payment screenshot" '
+            'style="max-height:60px;border-radius:4px;border:1px solid #e2e8f0;" />'
+            "</a>",
+            payment.receipt.url,
+        )
 
     # ---------------------------------------------------- per-row buttons
     def changelist_view(self, request, extra_context=None):
@@ -168,7 +221,7 @@ class MembershipAdmin(admin.ModelAdmin):
 
 
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(ReceiptPreviewMixin, admin.ModelAdmin):
     list_display = (
         "membership", "amount", "method", "status", "transaction_id",
         "razorpay_order_id", "razorpay_payment_id", "receipt_preview", "paid_at",
@@ -178,15 +231,6 @@ class PaymentAdmin(admin.ModelAdmin):
         "razorpay_order_id", "razorpay_payment_id", "transaction_id", "admin_note"
     )
     readonly_fields = ("created_at", "paid_at", "receipt_preview")
-
-    @admin.display(description="Receipt")
-    def receipt_preview(self, obj):
-        if not obj.receipt:
-            return "—"
-        return format_html(
-            '<a href="{}" target="_blank">View</a>',
-            obj.receipt.url,
-        )
 
 
 @admin.register(PaymentSettings)
