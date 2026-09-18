@@ -1,16 +1,44 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.accounts.serializers import DataURLFileField
 from apps.library.models import Seat, Shift
 from apps.library.serializers import SeatSerializer, ShiftSerializer
 
-from .models import DurationDiscount, Membership, Payment
+from .models import Coupon, DurationDiscount, Membership, Payment
 
 
 class DurationDiscountSerializer(serializers.ModelSerializer):
     class Meta:
         model = DurationDiscount
         fields = ("min_months", "discount_percent", "is_active")
+
+
+def _fmt_money(value) -> str:
+    value = Decimal(str(value))
+    return ("%.2f" % value).rstrip("0").rstrip(".")
+
+
+class CouponOptionSerializer(serializers.ModelSerializer):
+    """A coupon card shown to members at checkout (no auth needed)."""
+
+    discount_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Coupon
+        fields = (
+            "code",
+            "discount_type",
+            "discount_value",
+            "discount_display",
+            "min_subtotal",
+        )
+
+    def get_discount_display(self, obj):
+        if obj.discount_type == "percent":
+            return f"{_fmt_money(obj.discount_value)}% off"
+        return f"₹{_fmt_money(obj.discount_value)} off"
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -55,24 +83,32 @@ class MembershipCreateSerializer(serializers.Serializer):
     duration_months = serializers.IntegerField(min_value=1, max_value=12, default=1)
     is_premium = serializers.BooleanField(required=False, default=False)
     renew = serializers.BooleanField(required=False, default=False)
+    coupon_code = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, default="", write_only=True
+    )
 
     def validate_seat(self, seat):
         if seat and not seat.is_active:
             raise serializers.ValidationError("This seat is inactive.")
         return seat
 
+    def validate_coupon_code(self, value):
+        return (value or "").strip()
+
 
 class MembershipSerializer(serializers.ModelSerializer):
     shift = ShiftSerializer(read_only=True)
     seat = SeatSerializer(read_only=True)
     payment = PaymentSerializer(read_only=True)
+    coupon_code = serializers.CharField(source="coupon.code", read_only=True, default="")
 
     class Meta:
         model = Membership
         fields = (
             "id", "shift", "seat", "plan_type", "duration_months", "is_premium",
             "is_renewal",
-            "discount_percent", "start_date", "end_date", "status", "payment_method",
+            "discount_percent", "coupon_code", "coupon_discount",
+            "start_date", "end_date", "status", "payment_method",
             "cash_request_expires_at", "amount", "days_left", "created_at", "payment",
         )
         read_only_fields = fields
@@ -85,13 +121,15 @@ class MembershipAdminSerializer(serializers.ModelSerializer):
     payment = PaymentSerializer(read_only=True)
     member_name = serializers.CharField(source="member.name", read_only=True)
     notification_logs = serializers.SerializerMethodField()
+    coupon_code = serializers.CharField(source="coupon.code", read_only=True, default="")
 
     class Meta:
         model = Membership
         fields = (
             "id", "member", "member_name", "shift",
             "seat", "plan_type", "duration_months", "is_premium", "is_renewal",
-            "discount_percent", "start_date", "end_date", "status",
+            "discount_percent", "coupon_code", "coupon_discount",
+            "start_date", "end_date", "status",
             "payment_method", "cash_request_expires_at", "amount",
             "days_left", "created_at", "payment", "notification_logs",
         )

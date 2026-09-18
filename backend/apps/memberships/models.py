@@ -92,6 +92,15 @@ class Membership(models.Model):
     # membership" always starts fresh, even on the same time block.
     is_renewal = models.BooleanField(default=False)
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0"))
+    coupon = models.ForeignKey(
+        "Coupon",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="memberships",
+        help_text="Promo coupon applied at checkout (if any).",
+    )
+    coupon_discount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0"))
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     status = models.CharField(
@@ -259,6 +268,91 @@ class PaymentSettings(models.Model):
         if obj is None:
             obj = cls.objects.create()
         return obj
+
+
+class Coupon(models.Model):
+    """Admin-managed promo code applied at checkout.
+
+    Members enter the code on the details step; the discount is validated
+    and applied server-side when the membership is created. Every pricing
+    control (value, validity window, usage caps) lives in Django admin so any
+    admin user can run campaigns without a single code change.
+    """
+
+    DISCOUNT_TYPES = (
+        ("percent", "Percentage"),
+        ("fixed", "Fixed amount"),
+    )
+
+    code = models.CharField(
+        max_length=50, unique=True, db_index=True,
+        help_text="Case-insensitive. Uppercased automatically on save.",
+    )
+    discount_type = models.CharField(
+        max_length=10, choices=DISCOUNT_TYPES, default="percent",
+        help_text="Percentage (%) of the plan total, or a flat amount (₹) off.",
+    )
+    discount_value = models.DecimalField(
+        max_digits=6, decimal_places=2,
+        help_text="Discount for this coupon: a % (e.g. 10 = 10% off) or a flat ₹ amount.",
+    )
+    min_subtotal = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0"),
+        help_text="Minimum plan total (before coupon) required. 0 = any amount.",
+    )
+    max_discount = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        help_text="Hard cap on the discount this coupon can give. Blank = no cap.",
+    )
+    valid_from = models.DateField(
+        null=True, blank=True,
+        help_text="Optional: first day the coupon can be used.",
+    )
+    valid_until = models.DateField(
+        null=True, blank=True,
+        help_text="Optional: last day the coupon can be used.",
+    )
+    max_uses = models.PositiveIntegerField(
+        default=0,
+        help_text="Total number of redemptions allowed. 0 = unlimited.",
+    )
+    used_count = models.PositiveIntegerField(default=0, editable=False)
+    max_uses_per_user = models.PositiveIntegerField(
+        default=1,
+        help_text="How many times one member may redeem this coupon.",
+    )
+    is_active = models.BooleanField(default=True)
+    show_at_checkout = models.BooleanField(
+        default=True,
+        help_text="Show this coupon in the checkout 'Have a coupon?' list. Hidden "
+        "codes still work when entered manually.",
+    )
+    show_in_marquee = models.BooleanField(
+        default=False,
+        help_text="Promote this coupon in the scrolling banner (plan step). "
+        "Only one coupon is promoted — the earliest matching one wins.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        if self.discount_type == "fixed":
+            badge = f"{self.discount_value}"
+        else:
+            badge = f"{self.discount_value}%"
+        return f"{self.code} · {badge} off"
+
+    @property
+    def remaining_uses(self):
+        if self.max_uses <= 0:
+            return None
+        return max(0, self.max_uses - self.used_count)
+
+    def save(self, *args, **kwargs):
+        self.code = (self.code or "").strip().upper()
+        super().save(*args, **kwargs)
 
 
 class WebhookEvent(models.Model):

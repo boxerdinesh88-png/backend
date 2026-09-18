@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.urls import path, reverse
 from django.utils.html import format_html
 
-from .models import DurationDiscount, Membership, Payment, PaymentSettings
+from .models import Coupon, DurationDiscount, Membership, Payment, PaymentSettings
 from .services import (
     activate_membership,
     approve_pending_payment,
@@ -52,7 +52,7 @@ class MembershipAdmin(admin.ModelAdmin):
     list_display = (
         "id", "member", "shift", "seat", "plan_type", "duration_months",
         "start_date", "end_date", "status", "payment_method",
-        "cash_request_expires_at", "amount", "payment_transaction_id",
+        "cash_request_expires_at", "amount", "coupon_info", "payment_transaction_id",
         "payment_receipt", "cash_actions",
     )
     list_filter = ("status", "payment_method", "shift")
@@ -72,6 +72,16 @@ class MembershipAdmin(admin.ModelAdmin):
     def payment_transaction_id(self, obj):
         payment = getattr(obj, "payment", None)
         return payment.transaction_id if payment and payment.transaction_id else "—"
+
+    @admin.display(description="Coupon")
+    def coupon_info(self, obj):
+        if not obj.coupon:
+            return "—"
+        return format_html(
+            '<span style="color:#065f46;">{}</span> <span style="color:#9ca3af;">−{}</span>',
+            obj.coupon.code,
+            obj.coupon_discount,
+        )
 
     @admin.display(description="Payment screenshot")
     def payment_receipt(self, obj):
@@ -255,3 +265,76 @@ class DurationDiscountAdmin(admin.ModelAdmin):
     list_display = ("min_months", "discount_percent", "is_active")
     list_editable = ("discount_percent", "is_active")
     ordering = ("min_months",)
+
+
+@admin.register(Coupon)
+class CouponAdmin(admin.ModelAdmin):
+    """Full control over promo codes — value, validity and usage caps."""
+
+    list_display = (
+        "code", "discount_type", "discount_value", "min_subtotal", "max_discount",
+        "usage", "valid_range", "is_active", "show_at_checkout", "show_in_marquee",
+        "redeemed_this_month",
+    )
+    list_filter = (
+        "discount_type", "is_active", "show_at_checkout", "show_in_marquee",
+        "valid_from", "valid_until",
+    )
+    list_editable = ("is_active", "show_at_checkout", "show_in_marquee")
+    search_fields = ("code",)
+    ordering = ("-created_at",)
+    readonly_fields = ("used_count", "created_at")
+    date_hierarchy = "created_at"
+
+    fieldsets = (
+        ("Coupon", {
+            "fields": ("code", "is_active", "show_at_checkout", "show_in_marquee"),
+        }),
+        ("Discount", {
+            "fields": (
+                ("discount_type", "discount_value"),
+                ("min_subtotal", "max_discount"),
+            ),
+        }),
+        ("Validity", {
+            "fields": (("valid_from", "valid_until"),),
+        }),
+        ("Usage limits", {
+            "fields": (
+                "max_uses", "used_count", "max_uses_per_user",
+            ),
+            "description": (
+                "used_count and every redemption are tracked from paid "
+                "memberships automatically — no manual bookkeeping needed."
+            ),
+        }),
+        ("Metadata", {
+            "fields": ("created_at",),
+            "classes": ("collapse",),
+        }),
+    )
+
+    @admin.display(description="Usage")
+    def usage(self, obj):
+        if obj.max_uses <= 0:
+            return f"{obj.used_count} / ∞"
+        return f"{obj.used_count} / {obj.max_uses}"
+
+    @admin.display(description="Valid")
+    def valid_range(self, obj):
+        if not obj.valid_from and not obj.valid_until:
+            return "Always"
+        return f"{obj.valid_from or '—'} → {obj.valid_until or '—'}"
+
+    @admin.display(description="Redemptions (30d)")
+    def redeemed_this_month(self, obj):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        cutoff = timezone.now() - timedelta(days=30)
+        return obj.memberships.filter(created_at__gte=cutoff).count()
+
+    def save_model(self, request, obj, form, change):
+        obj.code = (obj.code or "").strip().upper()
+        super().save_model(request, obj, form, change)

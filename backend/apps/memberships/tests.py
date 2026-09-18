@@ -21,7 +21,7 @@ from rest_framework.test import APITestCase
 from apps.accounts.models import User
 from apps.library.models import Seat, Shift
 
-from .models import Membership, Payment, WebhookEvent
+from .models import Coupon, Membership, Payment, WebhookEvent
 from .services import (
     WebhookSignatureError,
     _is_renewal,
@@ -552,3 +552,189 @@ class RenewalCreateAPITestCase(APITestCase):
         )
         self.assertEqual(res.status_code, 201)
         self.assertEqual(res.data["end_date"], str(self.today + timedelta(days=30)))
+
+
+class CouponAPITestCase(APITestCase):
+    """Coupon codes are validated at checkout and applied server-side."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="coupon-api@example.com", password="pass1234", name="Coupon API"
+        )
+        self.client.force_authenticate(self.user)
+        self.shift = Shift.objects.create(
+            name="Evening", start_time=time(17, 0), end_time=time(21, 0), price=500
+        )
+        self.today = timezone.localdate()
+        self.coupon = Coupon.objects.create(
+            code="WELCOME10", discount_type="percent", discount_value=10
+        )
+        self.flat = Coupon.objects.create(
+            code="FLAT50", discount_type="fixed", discount_value=50
+        )
+
+    def test_create_with_percent_coupon_applies_discount(self):
+        res = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly",
+             "duration_months": 1, "coupon_code": "welcome10"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["coupon_code"], "WELCOME10")
+        self.assertEqual(res.data["coupon_discount"], "50.00")
+        self.assertEqual(res.data["amount"], "450.00")
+
+    def test_create_with_fixed_coupon_applies_discount(self):
+        res = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly",
+             "duration_months": 1, "coupon_code": "FLAT50"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["amount"], "450.00")
+
+    def test_create_rejects_unknown_coupon(self):
+        res = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly",
+             "duration_months": 1, "coupon_code": "NOPE"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.data.get("code"), "invalid_coupon")
+
+    def test_coupon_respects_per_user_limit(self):
+        # First redemption succeeds and the coupon is recorded on the pass.
+        first = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly",
+             "duration_months": 1, "coupon_code": "WELCOME10"},
+            format="json",
+        )
+        self.assertEqual(first.status_code, 201)
+        # The member paid and now holds an active pass with this code; a new
+        # pass bought with the same code must be refused (one use per member).
+        Membership.objects.filter(pk=first.data["id"]).update(
+            status="active", start_date=self.today - timedelta(days=5)
+        )
+        second = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly",
+             "duration_months": 1, "coupon_code": "WELCOME10"},
+            format="json",
+        )
+        self.assertEqual(second.status_code, 400)
+        self.assertEqual(second.data.get("code"), "invalid_coupon")
+
+    def test_validate_endpoint_returns_discount(self):
+        res = self.client.post(
+            "/api/v1/memberships/coupons/validate/",
+            {"code": "welcome10", "shift": self.shift.id,
+             "plan_type": "monthly", "duration_months": 1},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data["valid"])
+        self.assertEqual(res.data["code"], "WELCOME10")
+        self.assertEqual(res.data["discount_amount"], 50.0)  # 10% off 500
+
+    def test_validate_endpoint_rejects_inactive_coupon(self):
+        self.coupon.is_active = False
+        self.coupon.save(update_fields=["is_active"])
+        res = self.client.post(
+            "/api/v1/memberships/coupons/validate/",
+            {"code": "WELCOME10", "shift": self.shift.id,
+             "plan_type": "monthly", "duration_months": 1},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data["valid"])
+        self.assertIsNotNone(res.data.get("message"))
+
+    def test_list_endpoint_exposes_usable_coupons(self):
+        res = self.client.get("/api/v1/memberships/coupons/")
+        self.assertEqual(res.status_code, 200)
+        codes = {item["code"]: item for item in res.data}
+        self.assertIn("WELCOME10", codes)
+        self.assertEqual(codes["WELCOME10"]["discount_display"], "10% off")
+        self.assertEqual(codes["FLAT50"]["discount_display"], "₹50 off")
+
+    def test_list_endpoint_hides_expired_and_exhausted_coupons(self):
+        self.coupon.valid_until = self.today - timedelta(days=1)
+        self.coupon.save(update_fields=["valid_until"])
+        self.flat.max_uses = 1
+        self.flat.used_count = 1
+        self.flat.save(update_fields=["max_uses", "used_count"])
+        res = self.client.get("/api/v1/memberships/coupons/")
+        self.assertEqual(res.status_code, 200)
+        codes = [item["code"] for item in res.data]
+        self.assertNotIn("WELCOME10", codes)
+        self.assertNotIn("FLAT50", codes)
+
+    def test_hidden_coupon_omitted_from_list_but_validates(self):
+        self.coupon.show_at_checkout = False
+        self.coupon.save(update_fields=["show_at_checkout"])
+        # Not shown in the public coupon list
+        codes = [item["code"] for item in self.client.get("/api/v1/memberships/coupons/").data]
+        self.assertNotIn("WELCOME10", codes)
+        # But still works when the member types the code manually
+        res = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly",
+             "duration_months": 1, "coupon_code": "WELCOME10"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["coupon_code"], "WELCOME10")
+        self.assertEqual(res.data["amount"], "450.00")
+
+    def test_promo_endpoint_returns_promoted_coupon(self):
+        self.coupon.show_in_marquee = True
+        self.coupon.save(update_fields=["show_in_marquee"])
+        res = self.client.get("/api/v1/memberships/coupons/promo/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["code"], "WELCOME10")
+        self.assertEqual(res.data["discount_display"], "10% off")
+
+    def test_promo_endpoint_hides_non_promoted_and_set_to_hidden(self):
+        # Nothing promoted yet → empty response
+        res = self.client.get("/api/v1/memberships/coupons/promo/")
+        self.assertEqual(res.data, {})
+        # Admin untoggles the flag → the promoted coupon disappears too
+        self.coupon.show_in_marquee = False
+        self.coupon.save(update_fields=["show_in_marquee"])
+        self.flat.show_in_marquee = True
+        self.flat.is_active = False  # disabled coupon must not be promoted
+        self.flat.save(update_fields=["show_in_marquee", "is_active"])
+        res = self.client.get("/api/v1/memberships/coupons/promo/")
+        self.assertEqual(res.data, {})
+
+    def test_only_one_coupon_applied_at_a_time(self):
+        res1 = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly",
+             "duration_months": 1, "coupon_code": "WELCOME10"},
+            format="json",
+        )
+        self.assertEqual(res1.status_code, 201)
+        m1 = Membership.objects.get(pk=res1.data["id"])
+        self.assertEqual(m1.coupon.code, "WELCOME10")
+        self.assertIsNotNone(m1.coupon_discount)
+        self.assertGreater(m1.coupon_discount, 0)
+        # Creating a second pass with a different coupon while the first is
+        # active replaces the coupon field on the new pass — the earlier pass
+        # is still valid but the DB never holds two coupon fields on one
+        # membership; "one coupon per pass" is enforced at model level.
+        Membership.objects.filter(pk=m1.pk).update(status="active", start_date=self.today - timedelta(days=5))
+        res2 = self.client.post(
+            "/api/v1/memberships/",
+            {"shift": self.shift.id, "plan_type": "monthly",
+             "duration_months": 1, "coupon_code": "FLAT50"},
+            format="json",
+        )
+        self.assertEqual(res2.status_code, 201)
+        m2 = Membership.objects.get(pk=res2.data["id"])
+        self.assertEqual(m2.coupon.code, "FLAT50")
+        self.assertEqual(m1.coupon.code, "WELCOME10")  # first pass untouched

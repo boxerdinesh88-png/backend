@@ -1,6 +1,7 @@
 import csv
 import logging
 from datetime import date
+from decimal import Decimal
 
 from django.db.models import Q
 from django.http import HttpResponse
@@ -27,6 +28,7 @@ from .services import (
     PaymentGatewayError,
     WebhookSignatureError,
     active_running_membership,
+    coupon_discount,
     create_payment_order,
     membership_amount,
     payment_status_report,
@@ -34,6 +36,7 @@ from .services import (
     request_cash_payment,
     request_manual_payment,
     seat_is_available,
+    validate_coupon,
     verify_and_activate,
 )
 
@@ -138,6 +141,19 @@ class MembershipViewSet(viewsets.GenericViewSet):
             is_premium=is_premium,
             premium_percent=seat.premium_percent if seat else 0,
         )
+
+        coupon = None
+        coupon_off = Decimal("0")
+        if data.get("coupon_code"):
+            coupon, coupon_err = validate_coupon(
+                data["coupon_code"], amount, user=request.user
+            )
+            if coupon_err:
+                return error_response(coupon_err, code="invalid_coupon")
+            if coupon:
+                coupon_off = coupon_discount(coupon, amount)
+                amount -= coupon_off
+
         membership = Membership.objects.create(
             member=request.user,
             shift=shift,
@@ -147,6 +163,8 @@ class MembershipViewSet(viewsets.GenericViewSet):
             is_premium=is_premium,
             is_renewal=is_renewal,
             discount_percent=discount_percent,
+            coupon=coupon,
+            coupon_discount=coupon_off,
             amount=amount,
             start_date=start_date,
             end_date=end_date,
@@ -335,6 +353,120 @@ class PaymentSettingsView(APIView):
         })
 
 
+class CouponListView(APIView):
+    """Public list of coupons members can pick at checkout (admin-managed)."""
+
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def get(self, request):
+        from django.utils import timezone
+
+        from .models import Coupon
+        from .serializers import CouponOptionSerializer
+
+        today = timezone.localdate()
+        usable = []
+        for coupon in Coupon.objects.filter(
+            is_active=True, show_at_checkout=True
+        ).order_by("created_at"):
+            if coupon.valid_from and coupon.valid_from > today:
+                continue
+            if coupon.valid_until and coupon.valid_until < today:
+                continue
+            remaining = coupon.remaining_uses
+            if remaining is not None and remaining <= 0:
+                continue
+            usable.append(coupon)
+        return Response(CouponOptionSerializer(usable, many=True).data)
+
+
+class CouponPromoView(APIView):
+    """The one coupon currently promoted in the scrolling banner (if any)."""
+
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def get(self, request):
+        from django.utils import timezone
+
+        from .models import Coupon
+        from .serializers import CouponOptionSerializer
+
+        today = timezone.localdate()
+        coupon = None
+        for candidate in Coupon.objects.filter(
+            is_active=True, show_in_marquee=True
+        ).order_by("created_at"):
+            if candidate.valid_from and candidate.valid_from > today:
+                continue
+            if candidate.valid_until and candidate.valid_until < today:
+                continue
+            remaining = candidate.remaining_uses
+            if remaining is not None and remaining <= 0:
+                continue
+            coupon = candidate
+            break
+        if coupon is None:
+            return Response({})
+        return Response(CouponOptionSerializer(coupon).data)
+
+
+class CouponValidateView(APIView):
+    """Validate a promo code against a live plan and return its discount.
+
+    Computes the plan subtotal server-side (never trusting a client-sent
+    price), then answers whether the code is usable and what it saves. The
+    same validation repeats authoritatively when the membership is created.
+    """
+
+    permission_classes = (AllowAny,)
+    authentication_classes = ()
+
+    def post(self, request):
+        code = request.data.get("code", "")
+        if not (code or "").strip():
+            return error_response("Please enter a coupon code.", code="invalid_coupon")
+
+        shift = Shift.objects.filter(pk=request.data.get("shift"), is_active=True).first()
+        if not shift:
+            return error_response("Invalid shift.", code="invalid_shift")
+
+        plan_type = request.data.get("plan_type", "monthly")
+        if plan_type not in ("daily", "weekly", "monthly"):
+            return error_response("Invalid plan type.", code="invalid_plan_type")
+        try:
+            months = int(request.data.get("duration_months") or 1)
+        except (TypeError, ValueError):
+            months = 1
+        months = max(1, min(months, 12))
+
+        seat = None
+        seat_id = request.data.get("seat")
+        if seat_id:
+            seat = Seat.objects.filter(pk=seat_id, is_active=True).first()
+        is_premium = bool(request.data.get("is_premium", False)) or bool(seat and seat.is_premium)
+
+        subtotal = membership_amount(
+            shift, months, plan_type,
+            is_premium=is_premium,
+            premium_percent=seat.premium_percent if (is_premium and seat) else 0,
+        )
+        coupon, error = validate_coupon(code, subtotal, user=request.user)
+        if coupon is None:
+            return Response({"valid": False, "message": error or "Invalid coupon code."})
+
+        discount = coupon_discount(coupon, subtotal)
+        return Response({
+            "valid": True,
+            "code": coupon.code,
+            "discount_type": coupon.discount_type,
+            "discount_value": float(coupon.discount_value),
+            "discount_amount": float(discount),
+            "subtotal": float(subtotal),
+        })
+
+
 class RazorpayWebhookView(APIView):
     """Server-to-server Razorpay webhook — the independent confirmation path.
 
@@ -492,7 +624,7 @@ class AdminMembershipViewSet(viewsets.ModelViewSet):
             "membership_id", "member_name", "email", "phone", "gender",
             "wifi_device_name", "ip_address",
             "shift", "plan_type", "duration_months", "seat", "start_date", "end_date",
-            "status", "amount", "payment_status", "created_at",
+            "status", "amount", "coupon", "coupon_discount", "payment_status", "created_at",
         ])
         for m in memberships:
             writer.writerow([
@@ -501,6 +633,8 @@ class AdminMembershipViewSet(viewsets.ModelViewSet):
                 m.shift.name, m.get_plan_type_display(), m.duration_months,
                 m.seat.seat_number if m.seat else "",
                 m.start_date, m.end_date, m.status, m.amount,
+                m.coupon.code if m.coupon else "",
+                m.coupon_discount,
                 m.payment.status if hasattr(m, "payment") else "",
                 m.created_at,
             ])

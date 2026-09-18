@@ -77,11 +77,71 @@ def recompute_membership_amount(membership):
         if membership.plan_type == "monthly"
         else Decimal("0")
     )
-    if membership.amount != amount or membership.discount_percent != discount:
+    if membership.coupon_id:
+        coupon_disc = coupon_discount(membership.coupon, amount)
+        amount -= coupon_disc
+    else:
+        coupon_disc = Decimal("0")
+    if membership.amount != amount or membership.discount_percent != discount or membership.coupon_discount != coupon_disc:
         membership.amount = amount
         membership.discount_percent = discount
-        membership.save(update_fields=["amount", "discount_percent"])
+        membership.coupon_discount = coupon_disc
+        membership.save(update_fields=["amount", "discount_percent", "coupon_discount"])
     return amount
+
+
+def coupon_discount(coupon, subtotal):
+    """The discount a coupon grants on a given subtotal (never below ₹0)."""
+    subtotal = Decimal(str(subtotal))
+    if coupon.discount_type == "fixed":
+        discount = min(coupon.discount_value, subtotal)
+    else:
+        discount = subtotal * coupon.discount_value / Decimal("100")
+    if coupon.max_discount is not None:
+        discount = min(discount, coupon.max_discount)
+    return max(discount, Decimal("0")).quantize(Decimal("0.01"))
+
+
+def validate_coupon(code, subtotal, user=None):
+    """Server-side coupon validation.
+
+    Returns ``(coupon, error)``: a usable ``Coupon`` and ``None`` when the
+    code is valid, or ``None`` and a friendly message when it is not.
+    """
+    from .models import Coupon, Membership
+
+    code = (code or "").strip()
+    if not code:
+        return None, None
+    coupon = Coupon.objects.filter(code__iexact=code).first()
+    if coupon is None:
+        return None, "Invalid coupon code."
+    if not coupon.is_active:
+        return None, "This coupon is no longer active."
+
+    today = timezone.localdate()
+    if coupon.valid_from and coupon.valid_from > today:
+        return None, "This coupon is not active yet."
+    if coupon.valid_until and coupon.valid_until < today:
+        return None, "This coupon has expired."
+
+    subtotal = Decimal(str(subtotal))
+    if coupon.min_subtotal > 0 and subtotal < coupon.min_subtotal:
+        return None, (
+            f"This coupon needs a minimum order of ₹{coupon.min_subtotal:.2f}."
+        )
+    if coupon.max_uses > 0 and coupon.used_count >= coupon.max_uses:
+        return None, "This coupon has reached its usage limit."
+
+    if user is not None and getattr(user, "is_authenticated", False):
+        used = Membership.objects.filter(
+            coupon=coupon,
+            member=user,
+            status__in=("pending_payment", "pending_cash", "pending_approval", "active"),
+        ).count()
+        if used >= coupon.max_uses_per_user:
+            return None, "You have already used this coupon."
+    return coupon, None
 
 
 def active_running_membership(member, shift=None, exclude_pk=None):
