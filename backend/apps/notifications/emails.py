@@ -4,7 +4,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 LIBRARY_PHONE = "+91 8804162854"
-LIBRARY_EMAIL = "PhahendraBabulibrary@gmail.com"
+LIBRARY_EMAIL = "phagendrababulibrary@gmail.com"
 LIBRARY_ADDRESS = "Vill- Kharhat, Begusarai, Bihar 851217"
 
 

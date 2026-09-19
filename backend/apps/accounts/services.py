@@ -123,7 +123,7 @@ def send_otp_email(user, otp, purpose="verify_email") -> bool:
         "If you didn't request this, you can safely ignore this email.\n\n"
         "Phahendra Babu Library\n"
         "Vill- Kharhat, Begusarai, Bihar 851217\n"
-        "+91 8804162854 · PhahendraBabulibrary@gmail.com\n"
+        "+91 8804162854 · phagendrababulibrary@gmail.com\n"
         "Managed by Akash Kumar"
     )
     html = render_to_string("emails/otp.html", ctx)
