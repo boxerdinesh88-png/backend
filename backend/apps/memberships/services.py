@@ -425,7 +425,7 @@ def request_cash_payment(membership):
 
     _hold_seat_for_request(membership, membership.cash_request_expires_at)
 
-    _send_cash_request_ack(membership)
+    _send_library_subscription_notice(membership)
     return membership
 
 
@@ -457,7 +457,7 @@ def request_manual_payment(membership, transaction_id, receipt):
     )
 
     _hold_seat_for_request(membership, membership.cash_request_expires_at)
-    _send_manual_payment_ack(membership)
+    _send_library_subscription_notice(membership)
     return membership
 
 
@@ -535,40 +535,24 @@ def expire_cash_requests():
     return count
 
 
-def _send_cash_request_ack(membership):
-    from apps.notifications.emails import build_cash_request_acknowledgement
-    from apps.notifications.service import notify_membership
+def _send_library_subscription_notice(membership):
+    """Email the library that a member has taken a subscription.
+
+    Replaces the former member-facing acknowledgement: the library must verify
+    the booking and take the response within the hold window.
+    """
+    from apps.notifications.emails import (
+        LIBRARY_EMAIL,
+        build_library_subscription_notice,
+    )
+    from apps.notifications.tasks import dispatch_email
 
     try:
-        subject, body, html = build_cash_request_acknowledgement(membership)
+        subject, body, html = build_library_subscription_notice(membership)
     except Exception:
-        logger.exception("could not build cash-request ack for membership %s", membership.id)
+        logger.exception("could not build library subscription notice for membership %s", membership.id)
         return
-    notify_membership(
-        membership,
-        type_="cash_request",
-        subject=subject,
-        body=body,
-        html=html,
-    )
-
-
-def _send_manual_payment_ack(membership):
-    from apps.notifications.emails import build_manual_payment_acknowledgement
-    from apps.notifications.service import notify_membership
-
-    try:
-        subject, body, html = build_manual_payment_acknowledgement(membership)
-    except Exception:
-        logger.exception("could not build manual-payment ack for membership %s", membership.id)
-        return
-    notify_membership(
-        membership,
-        type_="manual_payment_request",
-        subject=subject,
-        body=body,
-        html=html,
-    )
+    dispatch_email(subject, body, LIBRARY_EMAIL, html_body=html)
 
 
 def _send_payment_rejection(membership, reason):

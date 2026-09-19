@@ -193,6 +193,56 @@ f"{' (' + ctx['section'] + ')' if ctx['section'] else ''}\n"
     return subject, plain, html
 
 
+def build_library_subscription_notice(membership):
+    """Return (subject, plain_text, html) for an internal notice to the library.
+
+    Sent when a member initiates a cash/QR-manual payment booking so the
+    library can verify the member and check them in within the hold window.
+    """
+    ctx = _membership_context(membership)
+    member = membership.member
+    ctx["member_email"] = member.email
+    ctx["member_phone"] = member.phone or ""
+    ctx["member_class"] = member.class_name
+    ctx["member_gender"] = member.get_gender_display()
+    expires_at = membership.cash_request_expires_at
+    ctx["cash_expires"] = (
+        timezone.localtime(expires_at).strftime("%d %b %Y, %I:%M %p")
+        if expires_at
+        else ""
+    )
+    subject = (
+        f"New subscription taken · {ctx['member_name']} · {ctx['shift_name']} · Phahendra Babu Library"
+    )
+    plain = (
+        "The following member has taken a subscription at Phahendra Babu Library.\n"
+        "Please check the booking below and take the response within the given time.\n\n"
+        f"Booking ID : {ctx['booking_id']}\n"
+        f"Member     : {ctx['member_name']} <{ctx['member_email']}>\n"
+        f"Phone      : {ctx['member_phone'] or '—'}"
+        f"{' · ' + ctx['member_class'] if ctx['member_class'] else ''}"
+        f" · {ctx['member_gender']}\n"
+        f"Time block : {ctx['shift_name']} ({ctx['hours']})\n"
+        f"Seat       : {ctx['seat']}"
+        f"{' (' + ctx['section'] + ')' if ctx['section'] else ''}\n"
+        + (f"Seat type  : PREMIUM (+{ctx['premium_percent']}% of base price)\n" if ctx["premium"] and ctx["premium_percent"] else "")
+        + f"Plan       : {ctx['plan_label']}\n"
+        f"Valid      : {ctx['start_date']} → {ctx['end_date']}\n"
+        f"Amount     : ₹{ctx['amount']}\n"
+        f"Payment    : {ctx['payment_method']}"
+        f"{' (' + ctx['payment_ref'] + ')' if ctx['payment_ref'] else ''}\n"
+        + (f"Respond by : {ctx['cash_expires']}\n" if ctx["cash_expires"] else "")
+        + "\n"
+        "If no response is received before the deadline, the booking is "
+        "automatically cancelled and the seat is released.\n\n"
+        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"{ctx['library_phone']} · {ctx['library_email']}\n"
+        "Managed by Akash Kumar"
+    )
+    html = render_to_string("emails/library_subscription_notice.html", ctx)
+    return subject, plain, html
+
+
 def build_payment_rejection(membership, reason):
     """Return (subject, plain_text, html) for a rejected payment review."""
     ctx = _membership_context(membership)
