@@ -1,5 +1,5 @@
 """
-Phahendra Babu Library — Django settings.
+Phagendra Babu Library — Django settings.
 
 Environment-driven configuration. Defaults allow a quick local run with
 SQLite + console email; production uses PostgreSQL + Redis + SMTP.
@@ -37,8 +37,8 @@ CORS_ALLOWED_ORIGINS = [
         # "www." or before the HTTPS redirect are not blocked (a blocked
         # request surfaces as a generic "Network Error" in the browser).
         "http://localhost:3000,http://127.0.0.1:3000,"
-        "https://phagendrababulibrary.in,https://www.phagendrababulibrary.in,"
-        "http://phagendrababulibrary.in,http://www.phagendrababulibrary.in",
+        "https://Phagendrababulibrary.in,https://www.Phagendrababulibrary.in,"
+        "http://Phagendrababulibrary.in,http://www.Phagendrababulibrary.in",
     ).split(",")
     if o.strip()
 ]
@@ -241,7 +241,7 @@ REST_FRAMEWORK = {
 
 # ----------------------------------------------------------------- Spectacular
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Phahendra Babu Library API",
+    "TITLE": "Phagendra Babu Library API",
     "DESCRIPTION": "Premium 3D Library Seat Booking Platform",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
@@ -329,7 +329,7 @@ EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() in ("1", "true")
 # Hard timeout so a hanging SMTP server never stalls an OTP send forever;
 # connectivity failures fail fast and are retried instead of blocking.
 EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "30"))
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Phahendra Babu Library <no-reply@phahendrababulibrary.example>")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Phagendra Babu Library <no-reply@Phagendrababulibrary.example>")
 
 # ------------------------------------------------------------------ Payments
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")

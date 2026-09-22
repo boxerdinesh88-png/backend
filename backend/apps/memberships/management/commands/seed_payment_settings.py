@@ -37,8 +37,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         settings = PaymentSettings.get_singleton()
 
-        settings.upi_id = os.getenv("PAYMENT_UPI_ID", "phagendrababulibrary@indianbk")
-        settings.upi_name = os.getenv("PAYMENT_UPI_NAME", "Phahendra Babu Library")
+        settings.upi_id = os.getenv("PAYMENT_UPI_ID", "Phagendrababulibrary@indianbk")
+        settings.upi_name = os.getenv("PAYMENT_UPI_NAME", "Phagendra Babu Library")
         settings.bank_account_number = os.getenv("PAYMENT_BANK_ACCOUNT", "8199961593")
         settings.bank_ifsc = os.getenv("PAYMENT_BANK_IFSC", "IDIB000M585")
         settings.bank_name = os.getenv("PAYMENT_BANK_NAME", "Indian Bank")

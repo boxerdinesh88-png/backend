@@ -4,7 +4,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 LIBRARY_PHONE = "+91 8804162854"
-LIBRARY_EMAIL = "phagendrababulibrary@gmail.com"
+LIBRARY_EMAIL = "Phagendrababulibrary@gmail.com"
 LIBRARY_ADDRESS = "Vill- Kharhat, Begusarai, Bihar 851217"
 
 
@@ -53,10 +53,10 @@ def _membership_context(membership):
 def build_membership_confirmation(membership):
     """Return (subject, plain_text, html) for the seat-confirmation email."""
     ctx = _membership_context(membership)
-    subject = f"Your seat is confirmed · {ctx['shift_name']} · Phahendra Babu Library"
+    subject = f"Your seat is confirmed · {ctx['shift_name']} · Phagendra Babu Library"
     plain = (
         f"Hi {ctx['member_name']},\n\n"
-        "Your seat at Phahendra Babu Library is confirmed!\n\n"
+        "Your seat at Phagendra Babu Library is confirmed!\n\n"
         f"Booking ID : {ctx['booking_id']}\n"
         f"Time block : {ctx['shift_name']} ({ctx['hours']})\n"
         f"Seat       : {ctx['seat']}"
@@ -72,7 +72,7 @@ def build_membership_confirmation(membership):
         f"Features         : {ctx['features_url']}\n"
         f"Terms of Service : {ctx['terms_url']}\n"
         f"Help & support   : {ctx['help_url']}\n\n"
-        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"Phagendra Babu Library\n{ctx['library_address']}\n"
         f"{ctx['library_phone']} · {ctx['library_email']}\n"
         "Managed by Akash Kumar"
     )
@@ -83,10 +83,10 @@ def build_membership_confirmation(membership):
 def build_membership_renewal(membership):
     """Return (subject, plain_text, html) for a renewed membership."""
     ctx = _membership_context(membership)
-    subject = f"Your membership is renewed · {ctx['shift_name']} · Phahendra Babu Library"
+    subject = f"Your membership is renewed · {ctx['shift_name']} · Phagendra Babu Library"
     plain = (
         f"Hi {ctx['member_name']},\n\n"
-        "Your Phahendra Babu Library membership has been renewed successfully.\n"
+        "Your Phagendra Babu Library membership has been renewed successfully.\n"
         "Your seat stays reserved for your time block — no action is needed.\n\n"
         f"Booking ID : {ctx['booking_id']}\n"
         f"Time block : {ctx['shift_name']} ({ctx['hours']})\n"
@@ -98,13 +98,13 @@ def build_membership_renewal(membership):
         f"Amount paid: ₹{ctx['amount']}\n"
         f"Payment    : {ctx['payment_method']}"
         f"{' (' + ctx['payment_ref'] + ')' if ctx['payment_ref'] else ''}\n\n"
-        "Thank you for continuing with Phahendra Babu Library — we're glad to "
+        "Thank you for continuing with Phagendra Babu Library — we're glad to "
         "keep your seat ready for you.\n\n"
         f"View membership  : {ctx['dashboard_url']}\n"
         f"Features         : {ctx['features_url']}\n"
         f"Terms of Service : {ctx['terms_url']}\n"
         f"Help & support   : {ctx['help_url']}\n\n"
-        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"Phagendra Babu Library\n{ctx['library_address']}\n"
         f"{ctx['library_phone']} · {ctx['library_email']}\n"
         "Managed by Akash Kumar"
     )
@@ -141,7 +141,7 @@ def build_cash_request_acknowledgement(membership):
         f"Amount     : ₹{ctx['amount']} (to be paid in cash)\n\n"
         f"{ctx['body_note']}\n\n"
         f"Request status can be viewed anytime at {ctx['dashboard_url']}.\n\n"
-        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"Phagendra Babu Library\n{ctx['library_address']}\n"
         f"{ctx['library_phone']} · {ctx['library_email']}\n"
         "Managed by Akash Kumar"
     )
@@ -185,7 +185,7 @@ f"{' (' + ctx['section'] + ')' if ctx['section'] else ''}\n"
         + f"Duration      : {ctx['plan_label']}\n\n"
         f"{ctx['body_note']}\n\n"
         f"Request status can be viewed anytime at {ctx['dashboard_url']}.\n\n"
-        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"Phagendra Babu Library\n{ctx['library_address']}\n"
         f"{ctx['library_phone']} · {ctx['library_email']}\n"
         "Managed by Akash Kumar"
     )
@@ -212,10 +212,10 @@ def build_library_subscription_notice(membership):
         else ""
     )
     subject = (
-        f"New subscription taken · {ctx['member_name']} · {ctx['shift_name']} · Phahendra Babu Library"
+        f"New subscription taken · {ctx['member_name']} · {ctx['shift_name']} · Phagendra Babu Library"
     )
     plain = (
-        "The following member has taken a subscription at Phahendra Babu Library.\n"
+        "The following member has taken a subscription at Phagendra Babu Library.\n"
         "Please check the booking below and take the response within the given time.\n\n"
         f"Booking ID : {ctx['booking_id']}\n"
         f"Member     : {ctx['member_name']} <{ctx['member_email']}>\n"
@@ -235,7 +235,7 @@ def build_library_subscription_notice(membership):
         + "\n"
         "If no response is received before the deadline, the booking is "
         "automatically cancelled and the seat is released.\n\n"
-        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"Phagendra Babu Library\n{ctx['library_address']}\n"
         f"{ctx['library_phone']} · {ctx['library_email']}\n"
         "Managed by Akash Kumar"
     )
@@ -261,7 +261,7 @@ def build_payment_rejection(membership, reason):
         + f"{ctx['body_note']}\n\n"
         f"Book again: {ctx['renew_url']}\n"
         f"Questions? Call us at {ctx['library_phone']}.\n\n"
-        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"Phagendra Babu Library\n{ctx['library_address']}\n"
         f"{ctx['library_phone']} · {ctx['library_email']}\n"
         "Managed by Akash Kumar"
     )
@@ -278,7 +278,7 @@ def build_membership_reminder(membership, type_):
     if type_ == "expiry_warning":
         ctx["days_left"] = 7
         heading = "Your membership expires in 7 days"
-        subject = "Your Phahendra Babu Library membership expires in 7 days"
+        subject = "Your Phagendra Babu Library membership expires in 7 days"
         body_note = (
             f"This is a heads-up that your membership runs out in 7 days "
             f"({ctx['end_date']}). Renew now to keep your seat."
@@ -286,7 +286,7 @@ def build_membership_reminder(membership, type_):
     elif type_ == "reminder_3day":
         ctx["days_left"] = 3
         heading = "Your membership expires in 3 days"
-        subject = "Your Phahendra Babu Library membership expires in 3 days"
+        subject = "Your Phagendra Babu Library membership expires in 3 days"
         body_note = (
             f"Reminder: your membership runs out in 3 days "
             f"({ctx['end_date']}). Renew today so your seat stays reserved."
@@ -294,7 +294,7 @@ def build_membership_reminder(membership, type_):
     else:
         ctx["days_left"] = max(days_left, 1)
         heading = "Your membership expires tomorrow"
-        subject = "Your Phahendra Babu Library membership expires tomorrow"
+        subject = "Your Phagendra Babu Library membership expires tomorrow"
         body_note = (
             f"This is your final reminder — your membership ends tomorrow "
             f"({ctx['end_date']}). Renew today so your seat stays reserved."
@@ -318,10 +318,10 @@ def build_membership_reminder(membership, type_):
         "3. Once the seat is allotted to another member, its availability cannot be guaranteed.\n"
         "4. For any queries regarding renewal, please contact the library management.\n\n"
         "Thank you for your cooperation.\n"
-        "Phahendra Babu Library Management\n\n"
+        "Phagendra Babu Library Management\n\n"
         f"Renew online anytime: {ctx['renew_url']}\n"
         f"Questions? Call us at {ctx['library_phone']}.\n\n"
-        f"Phahendra Babu Library\n{ctx['library_address']}\n"
+        f"Phagendra Babu Library\n{ctx['library_address']}\n"
         f"{ctx['library_phone']} · {ctx['library_email']}\n"
         "Managed by Akash Kumar"
     )

@@ -103,10 +103,10 @@ def send_otp_email(user, otp, purpose="verify_email") -> bool:
     """
     is_reset = purpose == "reset_password"
     if is_reset:
-        subject = "Reset your Phahendra Babu Library password"
+        subject = "Reset your Phagendra Babu Library password"
         heading = "Reset your password"
     else:
-        subject = "Verify your Phahendra Babu Library email"
+        subject = "Verify your Phagendra Babu Library email"
         heading = "Verify your email address"
 
     ctx = {
@@ -118,12 +118,12 @@ def send_otp_email(user, otp, purpose="verify_email") -> bool:
     plain = (
         f"Hi {user.name},\n\n"
         f"{heading}.\n\n"
-        f"Your Phahendra Babu Library verification code is: {otp.code}\n\n"
+        f"Your Phagendra Babu Library verification code is: {otp.code}\n\n"
         "It expires in 10 minutes and can only be used once.\n"
         "If you didn't request this, you can safely ignore this email.\n\n"
-        "Phahendra Babu Library\n"
+        "Phagendra Babu Library\n"
         "Vill- Kharhat, Begusarai, Bihar 851217\n"
-        "+91 8804162854 · phagendrababulibrary@gmail.com\n"
+        "+91 8804162854 · Phagendrababulibrary@gmail.com\n"
         "Managed by Akash Kumar"
     )
     html = render_to_string("emails/otp.html", ctx)

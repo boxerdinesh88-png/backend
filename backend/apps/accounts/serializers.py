@@ -15,7 +15,7 @@ STRONG_PASSWORD = re.compile(
     r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$"
 )
 
-MAX_UPLOAD_BYTES = 3 * 1024 * 1024  # Reduced from 5MB to 3MB for FREE plan optimization
+MAX_UPLOAD_BYTES = 1 * 1024 * 1024  # Reduced to 1MB for data form uploads
 DOCUMENT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png", "webp"}
 PHOTO_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 DOCUMENT_KINDS = {"pdf", "jpeg", "png", "webp"}
@@ -39,7 +39,7 @@ def _validate_upload(value, extensions, kinds, message):
     if ext not in extensions:
         raise serializers.ValidationError(message)
     if value.size and value.size > MAX_UPLOAD_BYTES:
-        raise serializers.ValidationError("File must be 3 MB or smaller.")
+        raise serializers.ValidationError("File must be 1 MB or smaller.")
     kind = _sniff_kind(value.file.read(16))
     value.file.seek(0)
     if kind not in kinds:
